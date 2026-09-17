@@ -1,14 +1,9 @@
-﻿import clsx from 'clsx'
-
 export default function StatusBadge({ status }) {
+  const done = status === 'completed'
   return (
-    <span className={clsx(
-      'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium uppercase tracking-wide',
-      status === 'completed'
-        ? 'bg-green-50 text-green-700 ring-1 ring-green-200'
-        : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
-    )}>
-      {status === 'completed' ? 'Completed' : 'Pending'}
+    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-eyebrow">
+      <span className={`h-1.5 w-1.5 rounded-full ${done ? 'bg-ink' : 'border border-ink'}`} />
+      {done ? 'Selesai' : 'Menunggu'}
     </span>
   )
 }

@@ -1,93 +1,80 @@
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session as DbSession
 
 from ..database import get_db
-from ..models import PhotoSession, SelectedPhoto, SessionStatus
-from ..schemas import GalleryInfoResponse, SubmitSelectionRequest, SubmitSelectionResponse
-from ..services.drive_service import list_photos_in_folder
+from ..models import PhotoSession, SelectedPhoto, SessionStatus, utcnow
+from ..schemas import GalleryOut, Photo, SubmitOut, SubmitRequest
+from ..services import drive_service
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 
-@router.get("/{slug}", response_model=GalleryInfoResponse)
+
+def _session(db: DbSession, slug: str) -> PhotoSession:
+    s = db.query(PhotoSession).filter(PhotoSession.slug == slug).first()
+    if not s:
+        raise HTTPException(404, "Galeri tidak ditemukan atau link tidak valid.")
+    return s
+
+
+@router.get("/{slug}", response_model=GalleryOut)
 def get_gallery(slug: str, db: DbSession = Depends(get_db)):
-    """
-    Public endpoint for client gallery.
-    Returns session info and list of photos from Google Drive.
-    """
-    session = db.query(PhotoSession).filter(PhotoSession.slug == slug).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Gallery not found")
+    s = _session(db, slug)
+    try:
+        photos = drive_service.list_photos(s.drive_folder_id)
+    except drive_service.DriveError as e:
+        raise HTTPException(502, str(e))
 
-    # Fetch photos from Google Drive
-    photos = list_photos_in_folder(session.drive_folder_id)
-
-    # If already completed, include which photos were selected
-    selected_filenames = set()
-    if session.status == SessionStatus.completed:
-        selected_filenames = {p.filename for p in session.selected_photos}
-
-    # Mark selected photos (slot for future enhancement)
-    for photo in photos:
-        photo_dict = photo.model_dump() if hasattr(photo, 'model_dump') else photo.__dict__
-
-    return GalleryInfoResponse(
-        session_id=session.id,
-        client_name=session.client_name,
-        photo_limit=session.photo_limit,
-        status=session.status,
-        photos=photos,
-        total_photos=len(photos),
+    return GalleryOut(
+        client_name=s.client_name,
+        photo_limit=s.photo_limit,
+        status=s.status,
+        photos=[
+            Photo(
+                file_id=p.file_id,
+                filename=p.filename,
+                name=p.name,
+                width=p.width,
+                height=p.height,
+                thumb_url=f"/api/gallery/{slug}/img/{p.file_id}?size=thumb",
+                full_url=f"/api/gallery/{slug}/img/{p.file_id}?size=full",
+            )
+            for p in photos
+        ],
+        selected_ids=[p.drive_file_id for p in s.selected_photos],
     )
 
-@router.post("/{slug}/submit", response_model=SubmitSelectionResponse)
-def submit_selection(
-    slug: str,
-    payload: SubmitSelectionRequest,
-    db: DbSession = Depends(get_db),
-):
-    """
-    Submit photo selections for a client session.
-    Locks the session after submission.
-    """
-    session = db.query(PhotoSession).filter(PhotoSession.slug == slug).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Gallery not found")
 
-    if session.status == SessionStatus.completed:
-        raise HTTPException(
-            status_code=400,
-            detail="This gallery has already been submitted and is now read-only."
-        )
+@router.get("/{slug}/img/{file_id}")
+async def get_image(slug: str, file_id: str, size: str = "thumb", db: DbSession = Depends(get_db)):
+    s = _session(db, slug)
+    size = "full" if size == "full" else "thumb"
+    try:
+        data, media_type = await run_in_threadpool(drive_service.get_image, s.drive_folder_id, file_id, size)
+    except drive_service.DriveError as e:
+        raise HTTPException(404, str(e))
+    return Response(data, media_type=media_type, headers={"Cache-Control": "public, max-age=604800, immutable"})
 
-    selected = payload.selected_files
 
-    if len(selected) == 0:
-        raise HTTPException(status_code=400, detail="Please select at least 1 photo.")
+@router.post("/{slug}/submit", response_model=SubmitOut)
+def submit(slug: str, body: SubmitRequest, db: DbSession = Depends(get_db)):
+    s = _session(db, slug)
+    if s.status == SessionStatus.completed:
+        raise HTTPException(400, "Pilihan sudah dikirim sebelumnya. Galeri ini sekarang hanya bisa dilihat.")
 
-    if len(selected) > session.photo_limit:
-        raise HTTPException(
-            status_code=400,
-            detail=f"You selected {len(selected)} photos but the limit is {session.photo_limit}."
-        )
+    ids = list(dict.fromkeys(body.file_ids))  # de-dupe, keep order
+    if len(ids) > s.photo_limit:
+        raise HTTPException(400, f"Maksimal {s.photo_limit} foto, Anda memilih {len(ids)}.")
 
-    # Save selected photos
-    for item in selected:
-        photo = SelectedPhoto(
-            session_id=session.id,
-            filename=item.get("name_without_ext", item.get("filename", "")),
-            drive_file_id=item.get("file_id"),
-        )
-        db.add(photo)
+    by_id = {p.file_id: p for p in drive_service.list_photos(s.drive_folder_id)}
+    unknown = [i for i in ids if i not in by_id]
+    if unknown:
+        raise HTTPException(400, "Beberapa foto tidak dikenali. Muat ulang halaman dan coba lagi.")
 
-    # Mark session as completed
-    session.status = SessionStatus.completed
-    session.submitted_at = datetime.utcnow()
-
+    for i in ids:
+        s.selected_photos.append(SelectedPhoto(drive_file_id=i, filename=by_id[i].filename))
+    s.status = SessionStatus.completed
+    s.submitted_at = utcnow()
     db.commit()
 
-    return SubmitSelectionResponse(
-        success=True,
-        message=f"Terima kasih! {len(selected)} foto berhasil dikirim.",
-        selected_count=len(selected),
-    )
+    return SubmitOut(selected_count=len(ids), message=f"Terima kasih! {len(ids)} foto pilihan Anda sudah tersimpan.")

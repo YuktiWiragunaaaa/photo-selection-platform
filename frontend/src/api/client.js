@@ -1,0 +1,30 @@
+import axios from 'axios'
+
+export const TOKEN_KEY = 'psp_admin_token'
+
+export const api = axios.create({ baseURL: '/api' })
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err.response?.status === 401 && !err.config?.url?.endsWith('/admin/login')) {
+      localStorage.removeItem(TOKEN_KEY)
+      if (location.pathname.startsWith('/admin')) location.assign('/admin/login')
+    }
+    return Promise.reject(err)
+  },
+)
+
+export const errorMessage = (err, fallback = 'Terjadi kesalahan. Coba lagi.') => {
+  const d = err?.response?.data?.detail
+  if (typeof d === 'string') return d
+  if (Array.isArray(d)) return d.map((x) => x.msg).join(', ')
+  if (!err?.response) return 'Server tidak bisa dihubungi.'
+  return fallback
+}

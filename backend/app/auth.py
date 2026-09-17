@@ -1,41 +1,34 @@
-from datetime import datetime, timedelta
-from typing import Optional
-from jose import JWTError, jwt
+import hmac
+from datetime import datetime, timedelta, timezone
+
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+
 from .config import get_settings
 
-settings = get_settings()
-security = HTTPBearer()
-
 ALGORITHM = "HS256"
+bearer = HTTPBearer(auto_error=False)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
 def verify_admin_password(password: str) -> bool:
-    return password == settings.admin_password
+    return hmac.compare_digest(password.encode(), get_settings().admin_password.encode())
 
-async def get_current_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> str:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired token",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+
+def create_access_token() -> str:
+    settings = get_settings()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+    return jwt.encode({"sub": "admin", "exp": expire}, settings.secret_key, algorithm=ALGORITHM)
+
+
+def require_admin(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> str:
+    unauthorized = HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    if creds is None:
+        raise unauthorized
     try:
-        token = credentials.credentials
-        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
-        subject: str = payload.get("sub")
-        if subject != "admin":
-            raise credentials_exception
+        payload = jwt.decode(creds.credentials, get_settings().secret_key, algorithms=[ALGORITHM])
     except JWTError:
-        raise credentials_exception
-    return subject
+        raise unauthorized
+    if payload.get("sub") != "admin":
+        raise unauthorized
+    return "admin"

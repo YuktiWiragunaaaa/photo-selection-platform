@@ -1,196 +1,124 @@
-# Platform Seleksi Foto Interaktif
+# Pilih Foto — Platform Seleksi Foto Interaktif
 
-Aplikasi web client-proofing untuk fotografer. Klien memilih foto secara visual melalui galeri interaktif, dan fotografer mendapatkan file XMP Sidecar siap pakai untuk Capture One / Lightroom — tanpa pencatatan manual.
+Portal *client-proofing* untuk fotografer. Klien memilih foto lewat galeri bergaya clean-editorial di HP/desktop; fotografer mendapatkan file **XMP sidecar** (★5 + label hijau) siap disinkronkan ke Capture One / Lightroom — tanpa mencatat nama file manual.
 
----
+Semua komponen gratis: FastAPI + SQLite, React + Vite + Tailwind, Google Drive API (service account), Google Fonts.
 
-## Tech Stack
+## Tech stack
 
 | Layer | Teknologi |
 |---|---|
-| Backend | Python 3.12 + FastAPI + SQLAlchemy |
-| Database | SQLite (dev) / PostgreSQL (prod) |
-| Drive Integration | Google Drive API v3 (Service Account) |
-| Frontend | React 18 + Vite + Tailwind CSS |
-| Auth | JWT (simple password) |
+| Backend | Python 3.12 · FastAPI · SQLAlchemy 2 · Pillow · SQLite (Postgres opsional) |
+| Foto | Google Drive API v3 (API key atau service account) + thumbnail Pillow + cache lokal |
+| Frontend | React 18 · Vite · Tailwind CSS · lucide-react |
+| Auth admin | Password tunggal → JWT |
 
----
+## Menjalankan lokal
 
-## Prerequisites
-
-- Python 3.11+
-- Node.js 18+
-- Google Cloud Project dengan Drive API aktif
-
----
-
-## Setup Google Drive Service Account
-
-1. Buka [Google Cloud Console](https://console.cloud.google.com)
-2. Buat project baru atau pilih yang sudah ada
-3. Aktifkan **Google Drive API**: APIs & Services → Enable APIs → cari "Google Drive API" → Enable
-4. Buat Service Account: APIs & Services → Credentials → Create Credentials → Service Account
-   - Isi nama, klik Create
-   - Lewati role assignment (klik Continue)
-   - Klik Done
-5. Klik pada Service Account yang baru dibuat → tab **Keys** → Add Key → Create new key → **JSON**
-6. Simpan file JSON yang terunduh sebagai `backend/service_account.json`
-7. **Share folder Google Drive ke Service Account:**
-   - Buka folder Drive yang berisi foto JPEG
-   - Klik Share
-   - Paste email Service Account (ada di file JSON, field `client_email`)
-   - Berikan akses **Viewer**
-   - Klik Send
-
----
-
-## Quick Start (Local Development)
-
-### Backend
+Prasyarat: Python 3.11+, Node 18+.
 
 ```bash
+# Backend
 cd backend
-
-# Copy environment variables
-cp .env.example .env
-# Edit .env: set ADMIN_PASSWORD dan SECRET_KEY
-
-# Create virtual environment
+cp .env.example .env            # ubah ADMIN_PASSWORD & SECRET_KEY
 python -m venv venv
-
-# Activate (Windows)
-venv\Scripts\activate
-# Activate (Mac/Linux)
-source venv/bin/activate
-
-# Install dependencies
+venv\Scripts\activate           # Windows   |   source venv/bin/activate (Mac/Linux)
 pip install -r requirements.txt
-
-# Run server
-uvicorn app.main:app --reload --port 8000
+python dev.py                   # http://localhost:8000  (docs: /docs)
 ```
-
-Backend berjalan di: http://localhost:8000  
-Swagger UI (API docs): http://localhost:8000/docs
-
-### Frontend
 
 ```bash
+# Frontend (terminal kedua)
 cd frontend
-
-# Install dependencies
 npm install
-
-# Run dev server
-npm run dev
+npm run dev                     # http://localhost:5173
 ```
 
-Frontend berjalan di: http://localhost:5173
+Login admin: `http://localhost:5173/admin/login` dengan `ADMIN_PASSWORD` dari `.env`.
 
----
+> **Tanpa Google Drive (mode mock):** jika `GOOGLE_API_KEY` kosong dan `service_account.json` tidak ada, backend otomatis memakai 24 foto placeholder (picsum.photos). Seluruh alur — buat sesi, galeri, submit, export XMP — bisa dicoba tanpa kredensial apa pun.
 
-## Cara Penggunaan
+### Docker
 
-### 1. Login Admin
-- Buka http://localhost:5173/admin/login
-- Masukkan password yang telah di-set di `.env`
-
-### 2. Buat Sesi Baru
-- Klik **"Sesi Baru"** di dashboard
-- Isi:
-  - **Nama Klien**: Nama yang akan tampil di galeri
-  - **Google Drive Folder ID**: ID folder yang berisi foto JPEG (dari URL Drive)
-  - **Batas Maksimal Foto**: Jumlah foto maksimal yang bisa dipilih klien
-- Klik **"Buat Sesi"**
-
-### 3. Bagikan Link ke Klien
-- Di dashboard, klik tombol **"Link"** untuk menyalin URL galeri
-- Kirim URL tersebut ke klien
-
-### 4. Klien Memilih Foto
-- Klien membuka link → foto dari Drive tampil dalam grid
-- Tap/klik foto untuk memilih (ada centang dan highlight)
-- Progress bar di bawah menampilkan jumlah pilihan real-time
-- Klik **"Kirim Pilihan"** setelah selesai
-
-### 5. Export XMP / Filenames
-- Status sesi berubah menjadi **Completed** di dashboard
-- Klik **"XMP ZIP"** → download ZIP berisi file `.xmp` per foto
-- Klik **"Filenames"** → salin nama file ke clipboard
-- Klik **"CSV"** → download CSV daftar file terpilih
-
-### 6. Proses di Capture One / Lightroom
-- Ekstrak ZIP ke folder yang sama dengan file RAW
-- **Capture One**: Image → Synchronize Metadata
-- **Lightroom**: Library → Synchronize Folder
-- Foto yang dipilih klien akan memiliki **Rating: 5 bintang** dan **Label: Green**
-
----
-
-## Mendapatkan Google Drive Folder ID
-
-URL folder Drive:
+```bash
+docker compose up
 ```
-https://drive.google.com/drive/folders/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms
-```
-Folder ID = bagian setelah `/folders/` → `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms`
 
----
+## Menghubungkan Google Drive
 
-## Development tanpa Service Account (Mock Mode)
+Pilih salah satu. Keduanya gratis.
 
-Jika file `service_account.json` tidak ada, backend otomatis menggunakan **mock data** berisi 20 foto placeholder dari [picsum.photos](https://picsum.photos). Cocok untuk development UI tanpa perlu akses Drive.
+### Cara 1 — API key + folder publik (paling mudah)
 
----
+Tidak butuh OAuth atau kunci JSON, dan tidak terpengaruh kebijakan organisasi yang memblokir *service account key*.
 
-## Deployment (Railway / Render)
+1. [Google Cloud Console](https://console.cloud.google.com) → pilih/buat project → **APIs & Services → Enable APIs and Services → Google Drive API → Enable**.
+2. **APIs & Services → Credentials → + Create credentials → API key**. Salin key-nya.
+   *(Opsional tapi disarankan: Edit key → API restrictions → Restrict key → centang hanya Google Drive API.)*
+3. Di `backend/.env` isi: `GOOGLE_API_KEY=AIza...`
+4. Di Google Drive, klik kanan folder foto → **Share → General access: Anyone with the link → Viewer**.
+5. Restart backend. `GET /api/health` harus menjawab `"drive_mode": "api_key"`.
 
-### Backend
-1. Push repository ke GitHub
-2. Di Railway/Render: New Project → Deploy from GitHub
-3. Set environment variables dari `.env.example`
-4. Ganti `DATABASE_URL` ke PostgreSQL URL yang disediakan
-5. Upload `service_account.json` sebagai Secret File
+Folder harus publik-dengan-link (siapa pun yang punya link bisa melihat). Link galeri klien sendiri hanya berisi foto dari backend, bukan link Drive.
 
-### Frontend
-1. Di Vercel/Netlify: Import repository
-2. Set build command: `npm run build`
-3. Set output directory: `dist`
-4. Set environment: `VITE_API_URL=https://your-backend-url.railway.app`
+### Cara 2 — Service account (folder privat)
 
----
+1. Enable **Google Drive API** seperti di atas.
+2. **IAM & Admin → Service Accounts → Create service account** → tab **Keys → Add key → JSON**.
+3. Simpan sebagai `backend/service_account.json` (sudah di-`.gitignore`).
+4. **Share** folder foto ke `client_email` dari file JSON, akses **Viewer**.
+5. Restart backend → `"drive_mode": "service_account"`.
 
-## Project Structure
+> Jika muncul *"Service account key creation is disabled"*, project Anda berada di bawah organisasi yang memblokirnya — pakai Cara 1.
+
+Saat membuat sesi, tempel **link folder** atau ID-nya (bagian setelah `/folders/`) — keduanya diterima. Gambar diambil dalam ukuran 640 px (grid) dan 2048 px (lightbox) langsung dari Drive, lalu di-cache di `backend/cache/` — file asli 15 MB tidak pernah diunduh. Saat sesi dibuat, cache dipanaskan di latar belakang.
+
+## Alur kerja
+
+1. **Persiapan** — ekspor JPEG kecil ke satu folder Drive.
+2. **Buat sesi** — Admin → *Sesi baru*: nama klien, folder Drive, batas foto. Sistem memvalidasi folder dan membuat link unik `/g/<slug>`.
+3. **Bagikan** — salin link, kirim ke klien.
+4. **Klien memilih** — galeri masonry, ketuk untuk memilih, ikon sudut untuk memperbesar (lightbox, geser di HP). Pilihan tersimpan di browser klien jika halaman ditutup. Kuota dijaga; tombol *Kirim* aktif setelah ≥1 foto.
+5. **Submit** — konfirmasi → status sesi jadi *Selesai*; galeri berubah read-only dengan foto pilihan ditandai.
+6. **Export** — Admin → sesi → **XMP .zip** / **Salin nama file** / **CSV**.
+7. **Editing** — ekstrak ZIP ke folder RAW. Capture One: *Image → Synchronize Metadata*. Lightroom: *Metadata → Read Metadata from File*. Foto pilihan mendapat **Rating 5** dan **Label Green**.
+
+Admin juga bisa **Buka lagi** sesi (hapus pilihan, klien memilih ulang) atau **Hapus sesi**.
+
+## API ringkas
+
+| Method | Path | Keterangan |
+|---|---|---|
+| POST | `/api/admin/login` | `{password}` → JWT |
+| GET/POST | `/api/admin/sessions` | daftar / buat sesi |
+| POST | `/api/admin/check-folder` | validasi folder Drive |
+| GET/DELETE | `/api/admin/sessions/{id}` | detail / hapus |
+| POST | `/api/admin/sessions/{id}/reopen` | buka kembali |
+| GET | `/api/admin/sessions/{id}/export/{xmp,filenames,csv}` | export |
+| GET | `/api/gallery/{slug}` | data galeri publik |
+| GET | `/api/gallery/{slug}/img/{file_id}?size=thumb\|full` | proxy gambar (cache 7 hari) |
+| POST | `/api/gallery/{slug}/submit` | `{file_ids: []}` |
+
+Gambar tidak pernah di-link langsung ke Drive: backend mengunduhnya sekali, membuat thumbnail, dan menyimpannya di `backend/cache/`, sehingga link galeri tetap hidup berminggu-minggu (thumbnail Drive asli kedaluwarsa dalam hitungan jam).
+
+## Deployment
+
+- **Backend** (Railway/Render/Fly): set env dari `.env.example`, `DATABASE_URL` Postgres bila perlu, set `GOOGLE_API_KEY` (atau upload `service_account.json` sebagai secret file), `FRONTEND_URL` = domain frontend.
+- **Frontend** (Vercel/Netlify): build `npm run build`, output `dist`. Tambahkan rewrite `/api/*` → URL backend (atau jalankan keduanya di satu domain lewat reverse proxy).
+
+## Struktur
 
 ```
-photo-selection-platform/
-├── backend/
-│   ├── app/
-│   │   ├── main.py              # FastAPI app entry
-│   │   ├── config.py            # Settings (pydantic-settings)
-│   │   ├── database.py          # SQLAlchemy setup
-│   │   ├── models.py            # ORM: PhotoSession, SelectedPhoto
-│   │   ├── schemas.py           # Pydantic request/response
-│   │   ├── auth.py              # JWT auth
-│   │   ├── routers/
-│   │   │   ├── admin.py         # Admin endpoints
-│   │   │   └── gallery.py       # Public gallery endpoints
-│   │   └── services/
-│   │       ├── drive_service.py # Google Drive API
-│   │       └── xmp_service.py   # XMP generator + ZIP
-│   ├── service_account.json     # [NOT COMMITTED] Google creds
-│   ├── .env                     # [NOT COMMITTED] Local config
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── pages/               # Login, Dashboard, NewSession, Gallery
-│   │   ├── components/          # UI components
-│   │   ├── hooks/               # useSelection, useAuth
-│   │   ├── api/                 # adminApi, galleryApi
-│   │   └── context/             # AuthContext
-│   ├── package.json
-│   └── vite.config.js
-├── docker-compose.yml
-└── .env.example
+backend/
+  dev.py                  # launcher dev (reload)
+  app/
+    main.py  config.py  database.py  models.py  schemas.py  auth.py
+    routers/admin.py      # login, sesi, export
+    routers/gallery.py    # galeri publik, proxy gambar, submit
+    services/drive_service.py   # Drive API + mock + cache
+    services/xmp_service.py     # XMP / ZIP / CSV
+frontend/src/
+  pages/      Gallery · Login · Dashboard · NewSession · SessionDetail
+  components/ PhotoTile · Lightbox · SelectionBar · AdminShell · …
+  hooks/      useSelection (persist per galeri) · useClipboard
 ```

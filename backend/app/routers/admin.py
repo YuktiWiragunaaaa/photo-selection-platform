@@ -1,188 +1,149 @@
-from datetime import timedelta
-from typing import List
-import secrets
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse, JSONResponse
+import re
+from urllib.parse import quote
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session as DbSession
-import io
 
-from ..database import get_db
-from ..models import PhotoSession, SelectedPhoto, SessionStatus
-from ..schemas import (
-    LoginRequest, TokenResponse,
-    SessionCreate, SessionOut, SessionDetailOut,
-)
-from ..auth import create_access_token, verify_admin_password, get_current_admin
-from ..services.xmp_service import generate_zip, generate_filenames_string, generate_csv
-from ..services.drive_service import validate_folder_access
+from ..auth import create_access_token, require_admin, verify_admin_password
 from ..config import get_settings
+from ..database import get_db
+from ..models import PhotoSession
+from ..schemas import (
+    FolderCheck,
+    FolderCheckOut,
+    LoginRequest,
+    SessionCreate,
+    SessionDetailOut,
+    SessionOut,
+    TokenResponse,
+)
+from ..services import drive_service, xmp_service
 
-settings = get_settings()
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-def _build_session_out(session: PhotoSession) -> SessionOut:
-    gallery_url = f"{settings.base_url.rstrip('/')}/g/{session.slug}"
-    return SessionOut(
-        id=session.id,
-        slug=session.slug,
-        client_name=session.client_name,
-        drive_folder_id=session.drive_folder_id,
-        photo_limit=session.photo_limit,
-        status=session.status,
-        created_at=session.created_at,
-        submitted_at=session.submitted_at,
-        notes=session.notes,
-        selected_count=len(session.selected_photos),
-        gallery_url=gallery_url,
-    )
 
-@router.post("/login", response_model=TokenResponse)
-def login(request: LoginRequest):
-    """Admin login with password."""
-    if not verify_admin_password(request.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect password",
-        )
-    token = create_access_token(
-        data={"sub": "admin"},
-        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
-    )
-    return TokenResponse(access_token=token)
-
-@router.get("/sessions", response_model=List[SessionOut])
-def list_sessions(
-    db: DbSession = Depends(get_db),
-    _: str = Depends(get_current_admin),
-):
-    """List all sessions ordered by creation date."""
-    sessions = db.query(PhotoSession).order_by(PhotoSession.created_at.desc()).all()
-    return [_build_session_out(s) for s in sessions]
-
-@router.post("/sessions", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
-def create_session(
-    payload: SessionCreate,
-    db: DbSession = Depends(get_db),
-    _: str = Depends(get_current_admin),
-):
-    """Create a new photo selection session."""
-    slug = secrets.token_urlsafe(10)
-    session = PhotoSession(
-        client_name=payload.client_name,
-        drive_folder_id=payload.drive_folder_id,
-        photo_limit=payload.photo_limit,
-        notes=payload.notes,
-        slug=slug,
-    )
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-    return _build_session_out(session)
-
-@router.get("/sessions/{session_id}", response_model=SessionDetailOut)
-def get_session(
-    session_id: str,
-    db: DbSession = Depends(get_db),
-    _: str = Depends(get_current_admin),
-):
-    """Get session details including selected photos."""
-    session = db.query(PhotoSession).filter(PhotoSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    out = _build_session_out(session)
-    return SessionDetailOut(
-        **out.model_dump(),
-        selected_photos=session.selected_photos,
-    )
-
-@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_session(
-    session_id: str,
-    db: DbSession = Depends(get_db),
-    _: str = Depends(get_current_admin),
-):
-    """Delete a session and all its selected photos."""
-    session = db.query(PhotoSession).filter(PhotoSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    db.delete(session)
-    db.commit()
-
-@router.get("/sessions/{session_id}/export/zip")
-def export_zip(
-    session_id: str,
-    db: DbSession = Depends(get_db),
-    _: str = Depends(get_current_admin),
-):
-    """Download a ZIP of .xmp sidecar files for all selected photos."""
-    session = db.query(PhotoSession).filter(PhotoSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if session.status != SessionStatus.completed:
-        raise HTTPException(status_code=400, detail="Session is not yet completed")
-
-    filenames = [p.filename for p in session.selected_photos]
-    if not filenames:
-        raise HTTPException(status_code=400, detail="No photos selected")
-
-    zip_bytes = generate_zip(session.client_name, filenames)
-    safe_name = session.client_name.replace(" ", "_").replace("/", "_")
-    filename = f"{safe_name}_selections.zip"
-
-    return StreamingResponse(
-        io.BytesIO(zip_bytes),
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-@router.get("/sessions/{session_id}/export/filenames")
-def export_filenames(
-    session_id: str,
-    db: DbSession = Depends(get_db),
-    _: str = Depends(get_current_admin),
-):
-    """Get comma-separated list of selected filenames."""
-    session = db.query(PhotoSession).filter(PhotoSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    filenames = [p.filename for p in session.selected_photos]
+def _out(s: PhotoSession) -> dict:
     return {
-        "client_name": session.client_name,
-        "filenames": filenames,
-        "filenames_string": generate_filenames_string(filenames),
-        "count": len(filenames),
+        **{c: getattr(s, c) for c in ("id", "slug", "client_name", "drive_folder_id", "photo_limit", "status", "notes", "created_at", "submitted_at")},
+        "selected_count": len(s.selected_photos),
+        "gallery_url": f"{get_settings().frontend_url.rstrip('/')}/g/{s.slug}",
+        "selected_photos": s.selected_photos,
     }
 
-@router.get("/sessions/{session_id}/export/csv")
-def export_csv(
-    session_id: str,
-    db: DbSession = Depends(get_db),
-    _: str = Depends(get_current_admin),
-):
-    """Download selected photos as CSV file."""
-    session = db.query(PhotoSession).filter(PhotoSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
 
-    filenames = [p.filename for p in session.selected_photos]
-    csv_bytes = generate_csv(session.client_name, filenames)
-    safe_name = session.client_name.replace(" ", "_")
+def _get_or_404(db: DbSession, session_id: str) -> PhotoSession:
+    s = db.get(PhotoSession, session_id)
+    if not s:
+        raise HTTPException(404, "Sesi tidak ditemukan")
+    return s
 
-    return StreamingResponse(
-        io.BytesIO(csv_bytes),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}_selections.csv"'},
+
+def _extract_folder_id(value: str) -> str:
+    """Accept a raw folder ID or a full Drive URL."""
+    m = re.search(r"/folders/([A-Za-z0-9_-]+)", value)
+    return m.group(1) if m else value.strip()
+
+
+@router.post("/login", response_model=TokenResponse)
+def login(body: LoginRequest):
+    if not verify_admin_password(body.password):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Password salah")
+    return TokenResponse(access_token=create_access_token())
+
+
+@router.get("/sessions", response_model=list[SessionOut], dependencies=[Depends(require_admin)])
+def list_sessions(db: DbSession = Depends(get_db)):
+    rows = db.query(PhotoSession).order_by(PhotoSession.created_at.desc()).all()
+    return [_out(s) for s in rows]
+
+
+@router.post("/sessions", response_model=SessionOut, status_code=201, dependencies=[Depends(require_admin)])
+def create_session(body: SessionCreate, background: BackgroundTasks, db: DbSession = Depends(get_db)):
+    folder_id = _extract_folder_id(body.drive_folder_id)
+    try:
+        photos = drive_service.list_photos(folder_id, refresh=True)
+    except drive_service.DriveError as e:
+        raise HTTPException(400, str(e))
+    if not photos:
+        raise HTTPException(400, "Folder tidak berisi foto JPEG/PNG.")
+
+    s = PhotoSession(
+        client_name=body.client_name.strip(),
+        drive_folder_id=folder_id,
+        photo_limit=body.photo_limit,
+        notes=body.notes,
     )
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    background.add_task(drive_service.warm_cache, folder_id)
+    return _out(s)
 
-@router.post("/validate-folder")
-def validate_folder(
-    payload: dict,
-    _: str = Depends(get_current_admin),
-):
-    """Validate that a Google Drive folder ID is accessible."""
-    folder_id = payload.get("folder_id", "")
-    if not folder_id:
-        raise HTTPException(status_code=400, detail="folder_id is required")
-    accessible = validate_folder_access(folder_id)
-    return {"accessible": accessible, "folder_id": folder_id}
+
+@router.post("/check-folder", response_model=FolderCheckOut, dependencies=[Depends(require_admin)])
+def check_folder(body: FolderCheck):
+    folder_id = _extract_folder_id(body.drive_folder_id)
+    try:
+        photos = drive_service.list_photos(folder_id, refresh=True)
+    except drive_service.DriveError as e:
+        return FolderCheckOut(ok=False, photo_count=0, mock=drive_service.is_mock(), message=str(e))
+    mock = drive_service.is_mock()
+    msg = f"{len(photos)} foto ditemukan" + (" (mode mock — Google Drive belum dihubungkan)" if mock else "")
+    return FolderCheckOut(ok=len(photos) > 0, photo_count=len(photos), mock=mock, message=msg)
+
+
+@router.get("/sessions/{session_id}", response_model=SessionDetailOut, dependencies=[Depends(require_admin)])
+def get_session(session_id: str, db: DbSession = Depends(get_db)):
+    return _out(_get_or_404(db, session_id))
+
+
+@router.delete("/sessions/{session_id}", status_code=204, dependencies=[Depends(require_admin)])
+def delete_session(session_id: str, db: DbSession = Depends(get_db)):
+    db.delete(_get_or_404(db, session_id))
+    db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/sessions/{session_id}/reopen", response_model=SessionOut, dependencies=[Depends(require_admin)])
+def reopen_session(session_id: str, db: DbSession = Depends(get_db)):
+    """Let the client pick again (clears the previous selection)."""
+    s = _get_or_404(db, session_id)
+    s.selected_photos.clear()
+    s.status = "pending"
+    s.submitted_at = None
+    db.commit()
+    db.refresh(s)
+    return _out(s)
+
+
+def _completed_or_400(db: DbSession, session_id: str) -> PhotoSession:
+    s = _get_or_404(db, session_id)
+    if not s.selected_photos:
+        raise HTTPException(400, "Klien belum mengirim pilihan.")
+    return s
+
+
+def _safe(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_") or "client"
+
+
+@router.get("/sessions/{session_id}/export/xmp", dependencies=[Depends(require_admin)])
+def export_xmp(session_id: str, db: DbSession = Depends(get_db)):
+    s = _completed_or_400(db, session_id)
+    data = xmp_service.build_zip(s.client_name, [p.filename for p in s.selected_photos])
+    fname = f"{_safe(s.client_name)}_xmp.zip"
+    return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+@router.get("/sessions/{session_id}/export/filenames", dependencies=[Depends(require_admin)])
+def export_filenames(session_id: str, db: DbSession = Depends(get_db)):
+    s = _completed_or_400(db, session_id)
+    return {"filenames": xmp_service.filenames_string([p.filename for p in s.selected_photos]), "count": len(s.selected_photos)}
+
+
+@router.get("/sessions/{session_id}/export/csv", dependencies=[Depends(require_admin)])
+def export_csv(session_id: str, db: DbSession = Depends(get_db)):
+    s = _completed_or_400(db, session_id)
+    data = xmp_service.build_csv(s.client_name, [p.filename for p in s.selected_photos])
+    fname = f"{_safe(s.client_name)}_selected.csv"
+    return Response(data, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{quote(fname)}"'})

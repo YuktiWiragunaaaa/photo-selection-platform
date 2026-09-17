@@ -1,71 +1,88 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
 from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
 from .models import SessionStatus
 
-# Auth
+
+# ---- Auth ----
 class LoginRequest(BaseModel):
     password: str
+
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
-# Session
+
+# ---- Photos ----
+class Photo(BaseModel):
+    file_id: str
+    filename: str
+    name: str  # filename without extension
+    width: int
+    height: int
+    thumb_url: str
+    full_url: str
+
+
+# ---- Admin sessions ----
 class SessionCreate(BaseModel):
-    client_name: str = Field(..., min_length=1, max_length=255)
-    drive_folder_id: str = Field(..., min_length=1)
-    photo_limit: int = Field(..., ge=1, le=500)
-    notes: Optional[str] = None
+    client_name: str = Field(min_length=1, max_length=255)
+    drive_folder_id: str = Field(min_length=1, max_length=255)
+    photo_limit: int = Field(ge=1, le=1000)
+    notes: str | None = None
+
 
 class SelectedPhotoOut(BaseModel):
-    id: int
+    model_config = ConfigDict(from_attributes=True)
+    drive_file_id: str
     filename: str
-    drive_file_id: Optional[str]
-    selected_at: datetime
 
-    class Config:
-        from_attributes = True
 
 class SessionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: str
     slug: str
     client_name: str
     drive_folder_id: str
     photo_limit: int
     status: SessionStatus
+    notes: str | None
     created_at: datetime
-    submitted_at: Optional[datetime]
-    notes: Optional[str]
-    selected_count: int = 0
-    gallery_url: str = ""
+    submitted_at: datetime | None
+    selected_count: int
+    gallery_url: str
 
-    class Config:
-        from_attributes = True
 
 class SessionDetailOut(SessionOut):
-    selected_photos: List[SelectedPhotoOut] = []
+    selected_photos: list[SelectedPhotoOut]
 
-# Gallery (public)
-class DrivePhotoItem(BaseModel):
-    file_id: str
-    filename: str
-    name_without_ext: str
-    thumbnail_url: str
-    view_url: str
 
-class GalleryInfoResponse(BaseModel):
-    session_id: str
+class FolderCheck(BaseModel):
+    drive_folder_id: str = Field(min_length=1)
+
+
+class FolderCheckOut(BaseModel):
+    ok: bool
+    photo_count: int
+    mock: bool
+    message: str
+
+
+# ---- Public gallery ----
+class GalleryOut(BaseModel):
     client_name: str
     photo_limit: int
     status: SessionStatus
-    photos: List[DrivePhotoItem]
-    total_photos: int
+    photos: list[Photo]
+    selected_ids: list[str]
 
-class SubmitSelectionRequest(BaseModel):
-    selected_files: List[dict] = Field(..., description="List of {file_id, filename, name_without_ext}")
 
-class SubmitSelectionResponse(BaseModel):
-    success: bool
-    message: str
+class SubmitRequest(BaseModel):
+    file_ids: list[str] = Field(min_length=1)
+
+
+class SubmitOut(BaseModel):
     selected_count: int
+    message: str

@@ -1,24 +1,19 @@
-﻿import { useEffect } from 'react'
-import { X, AlertCircle } from 'lucide-react'
+import { useEffect } from 'react'
 
-export default function Toast({ message, onClose }) {
+export default function Toast({ message, onClose, duration = 2600 }) {
   useEffect(() => {
     if (!message) return
-    const timer = setTimeout(onClose, 3000)
-    return () => clearTimeout(timer)
-  }, [message, onClose])
+    const t = setTimeout(onClose, duration)
+    return () => clearTimeout(t)
+  }, [message, onClose, duration])
 
   if (!message) return null
-
   return (
-    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
-      <div className="flex items-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm max-w-sm">
-        <AlertCircle size={16} className="text-amber-400 shrink-0" />
-        <span>{message}</span>
-        <button onClick={onClose} className="ml-1 text-gray-400 hover:text-white">
-          <X size={14} />
-        </button>
-      </div>
+    <div
+      role="status"
+      className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 animate-rise rounded-full bg-ink px-4 py-2 text-sm text-paper shadow-lg"
+    >
+      {message}
     </div>
   )
 }

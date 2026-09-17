@@ -1,51 +1,64 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  * {
-    box-sizing: border-box;
+  html {
+    -webkit-tap-highlight-color: transparent;
   }
-
   body {
-    @apply font-sans antialiased bg-white text-gray-900;
+    @apply bg-paper text-ink font-sans antialiased;
+    font-feature-settings: 'ss01', 'cv11';
   }
-
   img {
     @apply select-none;
+    -webkit-user-drag: none;
+  }
+  :focus-visible {
+    outline: 2px solid #111;
+    outline-offset: 3px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
-@layer utilities {
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
+@layer components {
+  .eyebrow {
+    @apply font-mono text-[11px] uppercase tracking-eyebrow text-mute;
   }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 h-11 px-5 rounded-full text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
   }
-}
-
-/* Photo grid masonry layout */
-.photo-grid {
-  columns: 2;
-  column-gap: 0.5rem;
-}
-
-@media (min-width: 768px) {
-  .photo-grid {
-    columns: 3;
+  .btn-ink {
+    @apply btn bg-ink text-paper hover:bg-neutral-800;
   }
-}
-
-@media (min-width: 1280px) {
-  .photo-grid {
-    columns: 4;
+  .btn-ghost {
+    @apply btn border border-line text-ink hover:border-ink;
+  }
+  .field {
+    @apply w-full h-12 px-0 bg-transparent border-0 border-b border-line text-ink placeholder:text-faint focus:border-ink focus:ring-0 focus:outline-none transition-colors;
+  }
+  .label {
+    @apply eyebrow block mb-2;
   }
 }
 
-.photo-grid-item {
-  break-inside: avoid;
-  margin-bottom: 0.5rem;
-  display: block;
+/* Masonry: columns are built in JS (useColumns) so reading order stays left-to-right. */
+.masonry {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
 }
+.masonry-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+@media (min-width: 640px) { .masonry, .masonry-col { gap: 10px; } }
+@media (min-width: 1024px) { .masonry, .masonry-col { gap: 12px; } }

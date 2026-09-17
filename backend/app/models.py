@@ -1,36 +1,52 @@
-import uuid
-from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, Enum, ForeignKey, Text
-from sqlalchemy.orm import relationship
-from .database import Base
 import enum
+import secrets
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from .database import Base
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def new_slug() -> str:
+    return secrets.token_urlsafe(9)
+
 
 class SessionStatus(str, enum.Enum):
     pending = "pending"
     completed = "completed"
 
+
 class PhotoSession(Base):
     __tablename__ = "sessions"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    slug = Column(String(64), unique=True, nullable=False, index=True)
-    client_name = Column(String(255), nullable=False)
-    drive_folder_id = Column(String(255), nullable=False)
-    photo_limit = Column(Integer, nullable=False)
-    status = Column(Enum(SessionStatus), default=SessionStatus.pending, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    submitted_at = Column(DateTime, nullable=True)
-    notes = Column(Text, nullable=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    slug: Mapped[str] = mapped_column(String(32), unique=True, index=True, default=new_slug)
+    client_name: Mapped[str] = mapped_column(String(255))
+    drive_folder_id: Mapped[str] = mapped_column(String(255))
+    photo_limit: Mapped[int] = mapped_column(Integer)
+    status: Mapped[SessionStatus] = mapped_column(Enum(SessionStatus), default=SessionStatus.pending)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    selected_photos = relationship("SelectedPhoto", back_populates="session", cascade="all, delete-orphan")
+    selected_photos: Mapped[list["SelectedPhoto"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="SelectedPhoto.filename"
+    )
+
 
 class SelectedPhoto(Base):
     __tablename__ = "selected_photos"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
-    filename = Column(String(512), nullable=False)
-    drive_file_id = Column(String(255), nullable=True)
-    selected_at = Column(DateTime, default=datetime.utcnow)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    drive_file_id: Mapped[str] = mapped_column(String(255))
+    filename: Mapped[str] = mapped_column(String(512))
+    selected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
-    session = relationship("PhotoSession", back_populates="selected_photos")
+    session: Mapped[PhotoSession] = relationship(back_populates="selected_photos")

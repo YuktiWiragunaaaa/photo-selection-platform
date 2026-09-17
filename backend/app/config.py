@@ -1,20 +1,32 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=str(BACKEND_DIR / ".env"), env_file_encoding="utf-8", extra="ignore"
+    )
+
     admin_password: str = "admin123"
     secret_key: str = "dev-secret-key-change-in-production"
     access_token_expire_minutes: int = 480
-    database_url: str = "sqlite:///./photo_platform.db"
+    database_url: str = f"sqlite:///{BACKEND_DIR / 'photo_platform.db'}"
     google_service_account_file: str = "service_account.json"
+    google_api_key: str = ""
     frontend_url: str = "http://localhost:5173"
     app_env: str = "development"
-    base_url: str = "http://localhost:8000"
+    cache_dir: str = str(BACKEND_DIR / "cache")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    @property
+    def service_account_path(self) -> Path:
+        p = Path(self.google_service_account_file)
+        return p if p.is_absolute() else BACKEND_DIR / p
 
-@lru_cache()
+
+@lru_cache
 def get_settings() -> Settings:
     return Settings()

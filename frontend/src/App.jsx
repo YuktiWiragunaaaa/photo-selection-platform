@@ -1,38 +1,24 @@
-﻿import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider } from './context/AuthContext'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import NewSession from './pages/NewSession'
-import Gallery from './pages/Gallery'
-import NotFound from './pages/NotFound'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
+import Dashboard from './pages/Dashboard'
+import Gallery from './pages/Gallery'
+import Login from './pages/Login'
+import NewSession from './pages/NewSession'
+import NotFound from './pages/NotFound'
+import SessionDetail from './pages/SessionDetail'
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          {/* Admin routes */}
-          <Route path="/admin/login" element={<Login />} />
-          <Route path="/admin" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/sessions/new" element={
-            <ProtectedRoute>
-              <NewSession />
-            </ProtectedRoute>
-          } />
-          
-          {/* Client gallery */}
-          <Route path="/g/:slug" element={<Gallery />} />
-          
-          {/* Redirects */}
-          <Route path="/" element={<Navigate to="/admin" replace />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+    <Routes>
+      <Route path="/" element={<Navigate to="/admin" replace />} />
+      <Route path="/g/:slug" element={<Gallery />} />
+      <Route path="/admin/login" element={<Login />} />
+      <Route element={<ProtectedRoute />}>
+        <Route path="/admin" element={<Dashboard />} />
+        <Route path="/admin/new" element={<NewSession />} />
+        <Route path="/admin/sessions/:id" element={<SessionDetail />} />
+      </Route>
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   )
 }

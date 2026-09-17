@@ -1,42 +1,25 @@
-﻿import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { adminApi } from '../api/adminApi'
+import { TOKEN_KEY } from '../api/client'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('admin_token'))
-  const [isLoading, setIsLoading] = useState(false)
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY))
 
-  const login = async (password) => {
-    setIsLoading(true)
-    try {
-      const data = await adminApi.login(password)
-      localStorage.setItem('admin_token', data.access_token)
-      setToken(data.access_token)
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: err.response?.data?.detail || 'Login failed' }
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const login = useCallback(async (password) => {
+    const { access_token } = await adminApi.login(password)
+    localStorage.setItem(TOKEN_KEY, access_token)
+    setToken(access_token)
+  }, [])
 
-  const logout = () => {
-    localStorage.removeItem('admin_token')
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY)
     setToken(null)
-  }
+  }, [])
 
-  const isAuthenticated = Boolean(token)
-
-  return (
-    <AuthContext.Provider value={{ token, isAuthenticated, login, logout, isLoading }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  const value = useMemo(() => ({ isAuthed: !!token, login, logout }), [token, login, logout])
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
-}
+export const useAuth = () => useContext(AuthContext)

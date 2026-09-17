@@ -1,17 +1,6 @@
-﻿import axios from 'axios'
-
-const BASE = '/api/gallery'
+import { api } from './client'
 
 export const galleryApi = {
-  getGallery: async (slug) => {
-    const res = await axios.get(`${BASE}/${slug}`)
-    return res.data
-  },
-
-  submitSelection: async (slug, selectedFiles) => {
-    const res = await axios.post(`${BASE}/${slug}/submit`, {
-      selected_files: selectedFiles,
-    })
-    return res.data
-  },
+  get: (slug) => api.get(`/gallery/${slug}`).then((r) => r.data),
+  submit: (slug, file_ids) => api.post(`/gallery/${slug}/submit`, { file_ids }).then((r) => r.data),
 }
