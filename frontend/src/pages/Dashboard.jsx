@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Copy, Download, Plus, RefreshCw } from 'lucide-react'
 import AdminShell from '../components/AdminShell'
 import StatusBadge from '../components/StatusBadge'
+import ReadyDot from '../components/ReadyDot'
 import Toast from '../components/Toast'
 import { adminApi } from '../api/adminApi'
 import { errorMessage } from '../api/client'
@@ -102,6 +103,7 @@ export default function Dashboard() {
                     {s.client_name}
                   </Link>
                   <StatusBadge status={s.status} />
+                  {s.status === 'pending' && <ReadyDot sessionId={s.id} />}
                 </div>
                 <p className="mt-1 font-mono text-[11px] text-mute">
                   {fmtDate(s.created_at)}

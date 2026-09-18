@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     app_env: str = "development"
     cache_dir: str = str(BACKEND_DIR / "cache")
+    cache_retention_days: int = 30  # completed sessions older than this lose their image cache
 
     @property
     def service_account_path(self) -> Path:

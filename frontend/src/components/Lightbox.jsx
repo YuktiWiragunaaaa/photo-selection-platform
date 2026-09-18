@@ -1,17 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, MessageSquare, X } from 'lucide-react'
 import clsx from 'clsx'
 
-export default function Lightbox({ photos, index, selectedIds, onClose, onNavigate, onToggle, disabled, readOnly }) {
+export default function Lightbox({ photos, index, selectedIds, notes = {}, onNote, onClose, onNavigate, onToggle, disabled, readOnly }) {
   const photo = photos[index]
   const selected = selectedIds.has(photo.file_id)
+  const note = notes[photo.file_id] || ''
   const [loaded, setLoaded] = useState(false)
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [draft, setDraft] = useState(note)
   const touch = useRef(null)
+  const typing = useRef(false)
 
-  useEffect(() => setLoaded(false), [index])
+  useEffect(() => {
+    setLoaded(false)
+    setNoteOpen(false)
+    setDraft(notes[photo.file_id] || '')
+  }, [index]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKey = (e) => {
+      if (typing.current) {
+        if (e.key === 'Escape') setNoteOpen(false)
+        return
+      }
       if (e.key === 'Escape') onClose()
       if (e.key === 'ArrowRight') onNavigate(1)
       if (e.key === 'ArrowLeft') onNavigate(-1)
@@ -30,13 +42,19 @@ export default function Lightbox({ photos, index, selectedIds, onClose, onNaviga
 
   const onTouchStart = (e) => (touch.current = e.touches[0].clientX)
   const onTouchEnd = (e) => {
-    if (touch.current == null) return
+    if (touch.current == null || typing.current) return
     const dx = e.changedTouches[0].clientX - touch.current
     if (Math.abs(dx) > 50) onNavigate(dx < 0 ? 1 : -1)
     touch.current = null
   }
 
   const canSelect = !readOnly && (!disabled || selected)
+  const canNote = !readOnly && selected
+
+  const saveNote = () => {
+    onNote?.(photo.file_id, draft)
+    setNoteOpen(false)
+  }
 
   return (
     <div
@@ -85,19 +103,68 @@ export default function Lightbox({ photos, index, selectedIds, onClose, onNaviga
         </button>
       </div>
 
-      <footer className="flex h-20 shrink-0 items-center justify-center px-4">
-        {readOnly ? (
-          <span className="eyebrow">{selected ? 'Foto pilihan' : 'Tidak dipilih'}</span>
+      <footer className="shrink-0 px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3">
+        {noteOpen ? (
+          <div className="mx-auto max-w-lg animate-rise">
+            <label className="label" htmlFor="note">
+              Catatan untuk fotografer · {photo.name}
+            </label>
+            <textarea
+              id="note"
+              autoFocus
+              rows={2}
+              maxLength={300}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onFocus={() => (typing.current = true)}
+              onBlur={() => (typing.current = false)}
+              placeholder="Contoh: tolong crop lebih ketat, hapus orang di belakang"
+              className="w-full resize-none rounded-xl border border-line p-3 text-sm focus:border-ink focus:outline-none"
+            />
+            <div className="mt-2 flex justify-end gap-2">
+              <button type="button" className="btn-ghost h-9 px-3 text-xs" onClick={() => setNoteOpen(false)}>
+                Batal
+              </button>
+              <button type="button" className="btn-ink h-9 px-3 text-xs" onClick={saveNote}>
+                Simpan catatan
+              </button>
+            </div>
+          </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => onToggle(photo.file_id)}
-            disabled={!canSelect}
-            className={clsx(selected ? 'btn-ink' : 'btn-ghost', 'min-w-[11rem]')}
-          >
-            <Check size={16} strokeWidth={selected ? 3 : 2} />
-            {selected ? 'Dipilih' : disabled ? 'Kuota penuh' : 'Pilih foto ini'}
-          </button>
+          <div className="flex flex-col items-center gap-3">
+            {note && (
+              <p className="max-w-lg text-center text-xs text-mute">
+                <MessageSquare size={11} className="mr-1 inline" />
+                {note}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              {readOnly ? (
+                <span className="eyebrow">{selected ? 'Foto pilihan' : 'Tidak dipilih'}</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onToggle(photo.file_id)}
+                  disabled={!canSelect}
+                  className={clsx(selected ? 'btn-ink' : 'btn-ghost', 'min-w-[11rem]')}
+                >
+                  <Check size={16} strokeWidth={selected ? 3 : 2} />
+                  {selected ? 'Dipilih' : disabled ? 'Kuota penuh' : 'Pilih foto ini'}
+                </button>
+              )}
+              {canNote && (
+                <button
+                  type="button"
+                  onClick={() => setNoteOpen(true)}
+                  aria-label={note ? 'Ubah catatan' : 'Tambah catatan'}
+                  title={note ? 'Ubah catatan' : 'Tambah catatan'}
+                  className={clsx('btn-ghost h-11 w-11 px-0', note && 'border-ink')}
+                >
+                  <MessageSquare size={16} />
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </footer>
     </div>

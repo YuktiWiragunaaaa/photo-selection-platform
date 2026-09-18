@@ -7,7 +7,7 @@ import { errorMessage } from '../api/client'
 
 export default function NewSession() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ client_name: '', drive_folder_id: '', photo_limit: 50, notes: '' })
+  const [form, setForm] = useState({ client_name: '', drive_folder_id: '', photo_limit: 50, max_limit: '', pin: '', expires_at: '', notes: '' })
   const [check, setCheck] = useState(null)
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
@@ -33,7 +33,15 @@ export default function NewSession() {
     setBusy(true)
     setError('')
     try {
-      const s = await adminApi.createSession({ ...form, photo_limit: Number(form.photo_limit), notes: form.notes || null })
+      const s = await adminApi.createSession({
+        client_name: form.client_name,
+        drive_folder_id: form.drive_folder_id,
+        photo_limit: Number(form.photo_limit),
+        max_limit: form.max_limit ? Number(form.max_limit) : null,
+        pin: form.pin || null,
+        expires_at: form.expires_at ? new Date(form.expires_at + 'T23:59:59').toISOString() : null,
+        notes: form.notes || null,
+      })
       navigate(`/admin/sessions/${s.id}`, { state: { created: true } })
     } catch (err) {
       setError(errorMessage(err, 'Sesi tidak bisa dibuat.'))
@@ -79,12 +87,38 @@ export default function NewSession() {
           </p>
         </div>
 
-        <div>
-          <label className="label" htmlFor="limit">
-            Batas maksimal foto
-          </label>
-          <input id="limit" type="number" min={1} max={1000} className="field w-32 font-mono text-lg" required value={form.photo_limit} onChange={set('photo_limit')} />
-          <p className="mt-2 text-xs text-mute">Klien tidak bisa memilih lebih dari angka ini.</p>
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <label className="label" htmlFor="limit">
+              Foto dalam paket
+            </label>
+            <input id="limit" type="number" min={1} max={1000} className="field font-mono text-lg" required value={form.photo_limit} onChange={set('photo_limit')} />
+            <p className="mt-2 text-xs text-mute">Jumlah yang termasuk harga paket.</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="max">
+              Maksimal dengan tambahan
+            </label>
+            <input id="max" type="number" min={form.photo_limit || 1} max={2000} className="field font-mono text-lg" value={form.max_limit} onChange={set('max_limit')} placeholder="—" />
+            <p className="mt-2 text-xs text-mute">Kosongkan jika klien tidak boleh melebihi paket.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <label className="label" htmlFor="pin">
+              PIN galeri (opsional)
+            </label>
+            <input id="pin" inputMode="numeric" pattern="[0-9]{4,8}" maxLength={8} className="field font-mono text-lg tracking-[0.3em]" value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '') }))} placeholder="4–8 digit" />
+            <p className="mt-2 text-xs text-mute">Klien harus memasukkan PIN sebelum melihat foto.</p>
+          </div>
+          <div>
+            <label className="label" htmlFor="exp">
+              Berlaku sampai (opsional)
+            </label>
+            <input id="exp" type="date" min={new Date().toISOString().slice(0, 10)} className="field font-mono text-sm" value={form.expires_at} onChange={set('expires_at')} />
+            <p className="mt-2 text-xs text-mute">Setelah tanggal ini link tidak bisa dibuka.</p>
+          </div>
         </div>
 
         <div>

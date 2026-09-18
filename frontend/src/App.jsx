@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import NewSession from './pages/NewSession'
 import NotFound from './pages/NotFound'
 import SessionDetail from './pages/SessionDetail'
+import Settings from './pages/Settings'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/admin" element={<Dashboard />} />
         <Route path="/admin/new" element={<NewSession />} />
         <Route path="/admin/sessions/:id" element={<SessionDetail />} />
+        <Route path="/admin/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

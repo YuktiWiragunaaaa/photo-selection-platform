@@ -76,14 +76,20 @@ Saat membuat sesi, tempel **link folder** atau ID-nya (bagian setelah `/folders/
 ## Alur kerja
 
 1. **Persiapan** — ekspor JPEG kecil ke satu folder Drive.
-2. **Buat sesi** — Admin → *Sesi baru*: nama klien, folder Drive, batas foto. Sistem memvalidasi folder dan membuat link unik `/g/<slug>`.
+2. **Buat sesi** — Admin → *Sesi baru*: nama klien, folder Drive, **foto dalam paket**, opsional **maksimal dengan tambahan** (klien boleh melebihi paket; kelebihannya dicatat sebagai *extra*), **PIN** 4–8 digit, dan **tanggal kedaluwarsa**. Sistem memvalidasi folder dan membuat link unik `/g/<slug>`.
 3. **Bagikan** — salin link, kirim ke klien.
-4. **Klien memilih** — galeri masonry, ketuk untuk memilih, ikon sudut untuk memperbesar (lightbox, geser di HP). Pilihan tersimpan di browser klien jika halaman ditutup. Kuota dijaga; tombol *Kirim* aktif setelah ≥1 foto.
+4. **Klien memilih** — (masukkan PIN jika ada) galeri masonry, ketuk untuk memilih, ikon sudut untuk memperbesar (lightbox, geser di HP) dan **menulis catatan** per foto ("crop lebih ketat", dll). Pilihan & catatan tersimpan di browser klien jika halaman ditutup. Counter menampilkan `05 / 03 +2` saat melebihi paket; tombol *Kirim* aktif setelah ≥1 foto.
 5. **Submit** — konfirmasi → status sesi jadi *Selesai*; galeri berubah read-only dengan foto pilihan ditandai.
 6. **Export** — Admin → sesi → **XMP .zip** / **Salin nama file** / **CSV**.
-7. **Editing** — ekstrak ZIP ke folder RAW. Capture One: *Image → Synchronize Metadata*. Lightroom: *Metadata → Read Metadata from File*. Foto pilihan mendapat **Rating 5** dan **Label Green**.
+7. **Editing** — ekstrak ZIP ke folder RAW. Capture One: *Image → Synchronize Metadata*. Lightroom: *Metadata → Read Metadata from File*. Foto pilihan mendapat **Rating 5** dan **Label Green**; foto **di luar paket** mendapat **Label Yellow**; catatan klien masuk ke **Caption/Description**. CSV memuat kolom `extra` dan `note`.
 
-Admin juga bisa **Buka lagi** sesi (hapus pilihan, klien memilih ulang) atau **Hapus sesi**.
+Di halaman sesi admin bisa mengubah kuota, PIN, dan masa berlaku kapan saja (*Ubah kuota, PIN, atau masa berlaku*). Menu **Studio** menyimpan nama studio, tagline, kontak, dan logo yang tampil di galeri klien.
+
+Admin juga bisa **Buka lagi** sesi (hapus pilihan, klien memilih ulang), **Sinkronkan** (baca ulang folder Drive bila foto ditambah/dihapus), atau **Hapus sesi**.
+
+Di halaman sesi ada indikator **"Menyiapkan galeri… n / total"** → **"Galeri siap dibagikan"**; bagikan link setelah siap agar klien tidak menunggu thumbnail. Klien punya toggle **Semua / Pilihan** di bar bawah untuk meninjau ulang pilihannya sebelum mengirim.
+
+Cache gambar dibersihkan otomatis saat backend start untuk sesi yang selesai lebih dari `CACHE_RETENTION_DAYS` (default 30) hari, dan saat sesi dihapus.
 
 ## API ringkas
 
@@ -92,12 +98,18 @@ Admin juga bisa **Buka lagi** sesi (hapus pilihan, klien memilih ulang) atau **H
 | POST | `/api/admin/login` | `{password}` → JWT |
 | GET/POST | `/api/admin/sessions` | daftar / buat sesi |
 | POST | `/api/admin/check-folder` | validasi folder Drive |
-| GET/DELETE | `/api/admin/sessions/{id}` | detail / hapus |
+| GET/DELETE | `/api/admin/sessions/{id}` | detail / hapus (cache folder dibersihkan jika tak dipakai sesi lain) |
+| GET | `/api/admin/sessions/{id}/cache` | progres cache: `total`, `thumb`, `full`, `ready` |
+| POST | `/api/admin/sessions/{id}/sync` | baca ulang folder Drive + panaskan cache |
+| PATCH | `/api/admin/sessions/{id}` | ubah kuota / PIN / kedaluwarsa |
 | POST | `/api/admin/sessions/{id}/reopen` | buka kembali |
+| GET/PUT | `/api/admin/branding` · `POST/DELETE …/logo` | identitas studio |
 | GET | `/api/admin/sessions/{id}/export/{xmp,filenames,csv}` | export |
-| GET | `/api/gallery/{slug}` | data galeri publik |
+| GET | `/api/gallery/{slug}/meta` | nama klien, `locked`, `expired`, branding |
+| POST | `/api/gallery/{slug}/unlock` | `{pin}` → `{token}` (header `X-Gallery-Token`, atau `?t=` untuk gambar) |
+| GET | `/api/gallery/{slug}` | data galeri (butuh token jika ber-PIN) |
 | GET | `/api/gallery/{slug}/img/{file_id}?size=thumb\|full` | proxy gambar (cache 7 hari) |
-| POST | `/api/gallery/{slug}/submit` | `{file_ids: []}` |
+| POST | `/api/gallery/{slug}/submit` | `{file_ids: [], notes: {file_id: text}}` |
 
 Gambar tidak pernah di-link langsung ke Drive: backend mengunduhnya sekali, membuat thumbnail, dan menyimpannya di `backend/cache/`, sehingga link galeri tetap hidup berminggu-minggu (thumbnail Drive asli kedaluwarsa dalam hitungan jam).
 
@@ -117,8 +129,9 @@ backend/
     routers/gallery.py    # galeri publik, proxy gambar, submit
     services/drive_service.py   # Drive API + mock + cache
     services/xmp_service.py     # XMP / ZIP / CSV
+    services/branding.py        # identitas studio + logo
 frontend/src/
-  pages/      Gallery · Login · Dashboard · NewSession · SessionDetail
-  components/ PhotoTile · Lightbox · SelectionBar · AdminShell · …
-  hooks/      useSelection (persist per galeri) · useClipboard
+  pages/      Gallery · Login · Dashboard · NewSession · SessionDetail · Settings
+  components/ PhotoTile · Lightbox (catatan) · SelectionBar · PinGate · Brand · AccessEditor · …
+  hooks/      useSelection (persist per galeri) · useColumns (masonry) · useClipboard
 ```

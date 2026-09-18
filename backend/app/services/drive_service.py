@@ -214,8 +214,12 @@ def _resize(data: bytes, px: int) -> bytes:
         return out.getvalue()
 
 
-def _cache_path(file_id: str, size: str) -> Path:
-    d = Path(get_settings().cache_dir) / size
+def _folder_dir(folder_id: str) -> Path:
+    return Path(get_settings().cache_dir) / hashlib.sha1(folder_id.encode()).hexdigest()[:16]
+
+
+def _cache_path(folder_id: str, file_id: str, size: str) -> Path:
+    d = _folder_dir(folder_id) / size
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{hashlib.sha1(file_id.encode()).hexdigest()}.jpg"
 
@@ -246,7 +250,7 @@ def find_photo(folder_id: str, file_id: str) -> DrivePhoto | None:
 
 def get_image(folder_id: str, file_id: str, size: str) -> tuple[bytes, str]:
     """Return (bytes, media_type) for a photo, served from the on-disk cache when possible."""
-    cached = _cache_path(file_id, size)
+    cached = _cache_path(folder_id, file_id, size)
     if cached.exists():
         return cached.read_bytes(), "image/jpeg"
 
@@ -266,22 +270,68 @@ def get_image(folder_id: str, file_id: str, size: str) -> tuple[bytes, str]:
     return data, "image/jpeg"
 
 
+# ---------------------------------------------------------------- warming, status, cleanup
+_warming: set[str] = set()
+
+
+def cache_status(folder_id: str) -> dict:
+    """How much of a folder is already on disk. Cheap: only stat calls, no Drive round-trip
+    unless the list itself is unknown."""
+    try:
+        photos = list_photos(folder_id)
+    except DriveError:
+        return {"total": 0, "thumb": 0, "full": 0, "warming": folder_id in _warming}
+    thumb = sum(_cache_path(folder_id, p.file_id, "thumb").exists() for p in photos)
+    full = sum(_cache_path(folder_id, p.file_id, "full").exists() for p in photos)
+    return {"total": len(photos), "thumb": thumb, "full": full, "warming": folder_id in _warming}
+
+
 def warm_cache(folder_id: str, workers: int = 6) -> None:
     """Pre-fetch every thumbnail (then full images) so the client never waits. Runs in a background task."""
     from concurrent.futures import ThreadPoolExecutor
 
+    if folder_id in _warming:
+        return
+    _warming.add(folder_id)
     try:
         photos = list_photos(folder_id)
+
+        def fetch(args):
+            p, size = args
+            try:
+                get_image(folder_id, p.file_id, size)
+            except Exception:
+                pass
+
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            list(ex.map(fetch, [(p, "thumb") for p in photos]))
+            list(ex.map(fetch, [(p, "full") for p in photos]))
     except DriveError:
-        return
+        pass
+    finally:
+        _warming.discard(folder_id)
 
-    def fetch(args):
-        p, size = args
-        try:
-            get_image(folder_id, p.file_id, size)
-        except Exception:
-            pass
 
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        list(ex.map(fetch, [(p, "thumb") for p in photos]))
-        list(ex.map(fetch, [(p, "full") for p in photos]))
+def purge_folder(folder_id: str) -> None:
+    """Drop everything cached for a folder (it is rebuilt on demand)."""
+    import shutil
+
+    shutil.rmtree(_folder_dir(folder_id), ignore_errors=True)
+    with _list_lock:
+        _list_cache.pop(folder_id, None)
+
+
+def purge_except(keep_folder_ids: set[str]) -> int:
+    """Remove cache directories that belong to no listed folder. Returns count removed."""
+    import shutil
+
+    root = Path(get_settings().cache_dir)
+    if not root.exists():
+        return 0
+    keep = {_folder_dir(f).name for f in keep_folder_ids}
+    removed = 0
+    for d in root.iterdir():
+        if d.is_dir() and d.name not in keep:
+            shutil.rmtree(d, ignore_errors=True)
+            removed += 1
+    return removed

@@ -1,23 +1,32 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-/** Selection state, persisted per gallery so a refresh on mobile doesn't lose picks. */
+const read = (key, fallback) => {
+  try {
+    const v = JSON.parse(localStorage.getItem(key))
+    return v ?? fallback
+  } catch {
+    return fallback
+  }
+}
+const write = (key, v) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(v))
+  } catch {}
+}
+
+/**
+ * Selection + per-photo notes, persisted per gallery so a refresh on mobile
+ * doesn't lose picks. `limit` is the hard cap (package + allowed extras).
+ */
 export function useSelection(slug, limit, initial = []) {
-  const key = `psp_sel_${slug}`
-  const [ids, setIds] = useState(() => {
-    if (initial.length) return initial
-    try {
-      return JSON.parse(localStorage.getItem(key) || '[]')
-    } catch {
-      return []
-    }
-  })
+  const idsKey = `psp_sel_${slug}`
+  const notesKey = `psp_notes_${slug}`
+  const [ids, setIds] = useState(() => (initial.length ? initial : read(idsKey, [])))
+  const [notes, setNotes] = useState(() => read(notesKey, {}))
   const [warning, setWarning] = useState('')
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(ids))
-    } catch {}
-  }, [key, ids])
+  useEffect(() => write(idsKey, ids), [idsKey, ids])
+  useEffect(() => write(notesKey, notes), [notesKey, notes])
 
   const toggle = useCallback(
     (id) => {
@@ -33,13 +42,35 @@ export function useSelection(slug, limit, initial = []) {
     [limit],
   )
 
+  const setNote = useCallback((id, text) => {
+    setNotes((prev) => {
+      const next = { ...prev }
+      if (text && text.trim()) next[id] = text.trim().slice(0, 300)
+      else delete next[id]
+      return next
+    })
+  }, [])
+
   const clear = useCallback(() => {
     setIds([])
+    setNotes({})
     try {
-      localStorage.removeItem(key)
+      localStorage.removeItem(idsKey)
+      localStorage.removeItem(notesKey)
     } catch {}
-  }, [key])
+  }, [idsKey, notesKey])
 
   const set = useMemo(() => new Set(ids), [ids])
-  return { ids, set, count: ids.length, atLimit: ids.length >= limit, toggle, clear, warning, clearWarning: () => setWarning('') }
+  return {
+    ids,
+    set,
+    notes,
+    setNote,
+    count: ids.length,
+    atLimit: ids.length >= limit,
+    toggle,
+    clear,
+    warning,
+    clearWarning: () => setWarning(''),
+  }
 }

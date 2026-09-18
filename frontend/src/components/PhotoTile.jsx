@@ -1,8 +1,8 @@
 import { memo, useState } from 'react'
-import { Check, Maximize2 } from 'lucide-react'
+import { Check, Maximize2, MessageSquare } from 'lucide-react'
 import clsx from 'clsx'
 
-function PhotoTile({ photo, index, selected, disabled, readOnly, onToggle, onOpen }) {
+function PhotoTile({ photo, index, selected, hasNote, disabled, readOnly, onToggle, onOpen }) {
   const [loaded, setLoaded] = useState(false)
   const dim = readOnly && !selected
 
@@ -59,6 +59,11 @@ function PhotoTile({ photo, index, selected, disabled, readOnly, onToggle, onOpe
           {photo.name}
         </span>
       </figcaption>
+      {hasNote && (
+        <span className="pointer-events-none absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-paper/90 text-ink backdrop-blur" title="Ada catatan">
+          <MessageSquare size={12} />
+        </span>
+      )}
 
       <button
         type="button"

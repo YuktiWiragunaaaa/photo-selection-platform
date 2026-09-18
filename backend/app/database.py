@@ -20,3 +20,24 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def migrate() -> None:
+    """create_all() never alters existing tables; add any columns the models gained since."""
+    from sqlalchemy import inspect, text
+
+    from . import models  # noqa: F401  (registers tables on Base)
+
+    Base.metadata.create_all(bind=engine)
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            existing = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in existing:
+                    continue
+                ddl = f'ALTER TABLE {table.name} ADD COLUMN {col.name} {col.type.compile(engine.dialect)}'
+                if col.default is not None and col.default.is_scalar:
+                    v = col.default.arg
+                    ddl += f" DEFAULT {int(v) if isinstance(v, bool) else repr(v)}"
+                conn.execute(text(ddl))
