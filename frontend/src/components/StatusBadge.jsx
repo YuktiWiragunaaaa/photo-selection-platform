@@ -1,9 +1,19 @@
-export default function StatusBadge({ status }) {
-  const done = status === 'completed'
-  return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-eyebrow">
-      <span className={`h-1.5 w-1.5 rounded-full ${done ? 'bg-ink' : 'border border-ink'}`} />
-      {done ? 'Selesai' : 'Menunggu'}
-    </span>
-  )
+import clsx from 'clsx'
+
+/** Pill status: Belum dibuka (not opened yet) · Memilih (client is choosing) · Selesai (submitted). */
+export function sessionState(s) {
+  if (s.status === 'completed') return 'done'
+  return s.first_opened_at ? 'choosing' : 'unopened'
+}
+
+const LOOK = {
+  done: ['Selesai', 'bg-ink text-paper'],
+  choosing: ['Memilih', 'bg-accent text-ink'],
+  unopened: ['Belum dibuka', 'bg-wash text-mute'],
+}
+
+export default function StatusBadge({ status, session, className }) {
+  const key = session ? sessionState(session) : status === 'completed' ? 'done' : 'choosing'
+  const [label, cls] = LOOK[key]
+  return <span className={clsx('inline-flex h-[26px] shrink-0 items-center rounded-full px-2.5 text-xs font-bold', cls, className)}>{label}</span>
 }

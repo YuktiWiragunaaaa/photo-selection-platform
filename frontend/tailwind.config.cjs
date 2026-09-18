@@ -5,17 +5,22 @@ module.exports = {
     extend: {
       fontFamily: {
         display: ['"Instrument Serif"', 'Georgia', 'serif'],
-        sans: ['Manrope', 'system-ui', 'sans-serif'],
+        sans: ['"Bricolage Grotesque"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
-        paper: '#ffffff',
-        ink: '#111111',
-        mute: '#7a7a7a',
-        faint: '#b5b5b5',
-        line: '#e8e8e8',
-        wash: '#f6f6f6',
-        danger: '#b3261e',
+        // Palette from the first mockup: warm cream, near-black ink, neon lime accent
+        paper: '#F4F1EA',
+        card: '#FFFFFF',
+        ink: '#141413',
+        ink2: '#252522',
+        mute: '#55524B',
+        faint: '#8A877F',
+        sand: '#CFCBC1', // secondary text on dark
+        line: '#E2DDD2',
+        wash: '#ECE7DC',
+        accent: '#D4FF3A', // neon lime — use on dark surfaces or as a fill under ink text
+        danger: '#B3261E',
       },
       letterSpacing: {
         eyebrow: '0.18em',

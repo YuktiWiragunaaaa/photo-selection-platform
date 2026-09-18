@@ -1,9 +1,12 @@
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .database import SessionLocal, migrate
@@ -29,8 +32,38 @@ def cleanup_cache() -> None:
         log.info("cache cleanup: removed %d folder cache(s)", removed)
 
 
+def backup_db(keep: int = 14) -> None:
+    """Daily copy of the SQLite database into backend/backups/ (keeps the last `keep` days)."""
+    url = settings.database_url
+    if not url.startswith("sqlite:///"):
+        return
+    db = Path(url.removeprefix("sqlite:///"))
+    if not db.exists():
+        return
+    import shutil
+    from datetime import date
+
+    folder = db.parent / "backups"
+    folder.mkdir(exist_ok=True)
+    target = folder / f"{db.stem}-{date.today():%Y-%m-%d}.db"
+    if not target.exists():
+        shutil.copy2(db, target)
+        log.info("database backup: %s", target.name)
+    for old in sorted(folder.glob(f"{db.stem}-*.db"))[:-keep]:
+        old.unlink(missing_ok=True)
+
+
+def warn_insecure_defaults() -> None:
+    if settings.admin_password in {"admin123", "changeme123"}:
+        log.warning("!! ADMIN_PASSWORD masih default. Ganti di backend/.env sebelum dibuka ke internet.")
+    if settings.secret_key.startswith(("dev-secret", "your-super-secret")):
+        log.warning("!! SECRET_KEY masih default. (Catatan: menggantinya membuat PIN sesi lama tidak berlaku.)")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    backup_db()
+    warn_insecure_defaults()
     migrate()
     cleanup_cache()
     yield
@@ -57,3 +90,24 @@ app.include_router(gallery.router)
 @app.get("/api/health")
 def health():
     return {"status": "ok", "drive_mode": drive_service.mode()}
+
+
+# ---------------------------------------------------------------- production frontend
+# After `npm run build`, the backend also serves the built website, so everything runs on
+# one address/port (fast: a few bundled files instead of hundreds of dev-server modules).
+DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if (DIST / "index.html").exists():
+    if (DIST / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str):
+        if full_path.startswith("api/"):
+            from fastapi import HTTPException
+
+            raise HTTPException(404)
+        f = (DIST / full_path).resolve()
+        if full_path and f.is_file() and DIST.resolve() in f.parents:
+            return FileResponse(f)
+        # index.html must never be cached, so a new build shows up right away
+        return FileResponse(DIST / "index.html", headers={"Cache-Control": "no-cache"})

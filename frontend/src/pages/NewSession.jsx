@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Shuffle } from 'lucide-react'
+import { randomPin, rememberPin } from '../utils/pin'
 import AdminShell from '../components/AdminShell'
 import { adminApi } from '../api/adminApi'
 import { errorMessage } from '../api/client'
@@ -42,6 +43,7 @@ export default function NewSession() {
         expires_at: form.expires_at ? new Date(form.expires_at + 'T23:59:59').toISOString() : null,
         notes: form.notes || null,
       })
+      rememberPin(s.id, form.pin)
       navigate(`/admin/sessions/${s.id}`, { state: { created: true } })
     } catch (err) {
       setError(errorMessage(err, 'Sesi tidak bisa dibuat.'))
@@ -109,7 +111,12 @@ export default function NewSession() {
             <label className="label" htmlFor="pin">
               PIN galeri (opsional)
             </label>
-            <input id="pin" inputMode="numeric" pattern="[0-9]{4,8}" maxLength={8} className="field font-mono text-lg tracking-[0.3em]" value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '') }))} placeholder="4–8 digit" />
+            <div className="flex items-end gap-2">
+              <input id="pin" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} className="field font-mono text-lg tracking-[0.3em]" value={form.pin} onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '') }))} placeholder="4 digit" />
+              <button type="button" className="btn-ghost h-10 shrink-0 px-3 text-xs" onClick={() => setForm((f) => ({ ...f, pin: randomPin() }))} title="Buat PIN acak">
+                <Shuffle size={13} /> Acak
+              </button>
+            </div>
             <p className="mt-2 text-xs text-mute">Klien harus memasukkan PIN sebelum melihat foto.</p>
           </div>
           <div>

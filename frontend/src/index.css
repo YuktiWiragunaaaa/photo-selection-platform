@@ -15,7 +15,7 @@
     -webkit-user-drag: none;
   }
   :focus-visible {
-    outline: 2px solid #111;
+    outline: 2px solid #141413;
     outline-offset: 3px;
   }
   @media (prefers-reduced-motion: reduce) {
@@ -34,10 +34,13 @@
     @apply inline-flex items-center justify-center gap-2 h-11 px-5 rounded-full text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-ink {
-    @apply btn bg-ink text-paper hover:bg-neutral-800;
+    @apply btn bg-ink text-paper hover:bg-ink2;
+  }
+  .btn-accent {
+    @apply btn bg-accent font-bold text-ink hover:brightness-95;
   }
   .btn-ghost {
-    @apply btn border border-line text-ink hover:border-ink;
+    @apply btn border-[1.5px] border-line text-ink hover:border-ink;
   }
   .field {
     @apply w-full h-12 px-0 bg-transparent border-0 border-b border-line text-ink placeholder:text-faint focus:border-ink focus:ring-0 focus:outline-none transition-colors;
@@ -47,10 +50,31 @@
   }
 }
 
+/* Dark surfaces (lightbox): ghost buttons and labels flip to light-on-dark */
+.on-dark .btn-ghost { border-color: #4A4944; color: #F4F1EA; }
+.on-dark .btn-ghost:hover { border-color: #F4F1EA; }
+.on-dark .eyebrow, .on-dark .label { color: #CFCBC1; }
+
+/* Opening title card (Intro.jsx) */
+@keyframes intro-letter {
+  from { opacity: 0; transform: translateY(0.4em) rotate(4deg); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes intro-sub { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes intro-line { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes intro-logo { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes intro-out { to { clip-path: inset(0 0 100% 0); } }
+.intro { clip-path: inset(0 0 0 0); }
+.intro-letter { display: inline-block; opacity: 0; animation: intro-letter 0.7s cubic-bezier(.2,.7,.2,1) forwards; }
+.intro-sub { opacity: 0; animation: intro-sub 0.6s ease forwards; }
+.intro-line { transform-origin: left; transform: scaleX(0); animation: intro-line 0.9s 0.8s cubic-bezier(.6,0,.2,1) forwards; }
+.intro-logo { animation: intro-logo 0.6s ease both; }
+.intro-out { animation: intro-out 0.7s cubic-bezier(.7,0,.2,1) forwards; }
+
 /* Masonry: columns are built in JS (useColumns) so reading order stays left-to-right. */
 .masonry {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: flex-start;
 }
 .masonry-col {
@@ -58,7 +82,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 @media (min-width: 640px) { .masonry, .masonry-col { gap: 10px; } }
 @media (min-width: 1024px) { .masonry, .masonry-col { gap: 12px; } }

@@ -1,15 +1,15 @@
 import { memo, useState } from 'react'
-import { Check, Maximize2, MessageSquare } from 'lucide-react'
+import { Bookmark, Check, Maximize2, MessageSquare } from 'lucide-react'
 import clsx from 'clsx'
 
-function PhotoTile({ photo, index, selected, hasNote, disabled, readOnly, onToggle, onOpen }) {
+function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, readOnly, onToggle, onMaybe, onOpen }) {
   const [loaded, setLoaded] = useState(false)
   const dim = readOnly && !selected
 
   return (
     <figure
       className={clsx(
-        'group relative overflow-hidden rounded-[3px] bg-wash animate-fade',
+        'group relative overflow-hidden rounded-2xl bg-wash animate-fade',
         dim && 'opacity-35',
       )}
       style={{ aspectRatio: `${photo.width} / ${photo.height}` }}
@@ -37,14 +37,14 @@ function PhotoTile({ photo, index, selected, hasNote, disabled, readOnly, onTogg
         {/* Selection frame: the photo itself steps back inside a thin ink border */}
         <span
           className={clsx(
-            'pointer-events-none absolute inset-0 rounded-[3px] border-2 transition-colors duration-300',
-            selected ? 'border-ink' : 'border-transparent',
+            'pointer-events-none absolute inset-0 rounded-2xl border-[3px] transition-colors duration-300',
+            selected ? 'border-accent' : 'border-transparent',
           )}
         />
         <span
           className={clsx(
             'pointer-events-none absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full transition-all duration-300',
-            selected ? 'scale-100 bg-ink text-paper' : 'scale-0 bg-paper text-ink',
+            selected ? 'scale-100 bg-accent text-ink' : 'scale-0 bg-paper text-ink',
           )}
         >
           <Check size={14} strokeWidth={3} />
@@ -59,10 +59,29 @@ function PhotoTile({ photo, index, selected, hasNote, disabled, readOnly, onTogg
           {photo.name}
         </span>
       </figcaption>
+      {extra && (
+        <span className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-ink px-2 py-0.5 text-[11px] font-bold text-accent">Tambahan</span>
+      )}
       {hasNote && (
-        <span className="pointer-events-none absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-paper/90 text-ink backdrop-blur" title="Ada catatan">
+        <span className="pointer-events-none absolute left-9 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-paper/90 text-ink backdrop-blur" title="Ada catatan">
           <MessageSquare size={12} />
         </span>
+      )}
+
+      {!readOnly && !selected && onMaybe && (
+        <button
+          type="button"
+          onClick={() => onMaybe(photo.file_id)}
+          aria-pressed={maybe}
+          aria-label={`${maybe ? 'Hapus tanda' : 'Tandai dulu'} ${photo.name}`}
+          title={maybe ? 'Hapus tanda' : 'Tandai dulu (masih ragu)'}
+          className={clsx(
+            'absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full backdrop-blur transition-opacity',
+            maybe ? 'bg-ink text-paper opacity-100' : 'bg-paper/85 text-ink opacity-0 hover:bg-paper focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100',
+          )}
+        >
+          <Bookmark size={14} fill={maybe ? 'currentColor' : 'none'} />
+        </button>
       )}
 
       <button

@@ -1,21 +1,39 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Copy, Download, Plus, RefreshCw } from 'lucide-react'
-import AdminShell from '../components/AdminShell'
-import StatusBadge from '../components/StatusBadge'
+import { Copy, Download, Plus, RefreshCw, Search } from 'lucide-react'
+import clsx from 'clsx'
+import AdminShell, { useBranding } from '../components/AdminShell'
+import StatusBadge, { sessionState } from '../components/StatusBadge'
 import ReadyDot from '../components/ReadyDot'
 import Toast from '../components/Toast'
 import { adminApi } from '../api/adminApi'
 import { errorMessage } from '../api/client'
 import { copyText } from '../hooks/useClipboard'
 
-const fmtDate = (iso) =>
-  new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+const fmtShort = (iso) => new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+const daysLeft = (iso) => Math.ceil((new Date(iso) - Date.now()) / 86400000)
+
+function metaLine(s) {
+  if (s.status === 'completed') return s.submitted_at ? `dikirim ${fmtShort(s.submitted_at)}` : 'selesai'
+  if (s.expires_at) {
+    const d = daysLeft(s.expires_at)
+    return d < 0 ? 'kedaluwarsa' : d === 0 ? 'deadline hari ini' : `deadline ${fmtShort(s.expires_at)}`
+  }
+  return `dibuat ${fmtShort(s.created_at)}`
+}
+
+function countLine(s) {
+  const n = s.status === 'completed' ? s.selected_count : s.draft_count
+  const extra = s.status === 'completed' && s.extra_count ? ` +${s.extra_count}` : ''
+  return `${n} / ${s.photo_limit}${extra}`
+}
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState(null)
   const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
+  const [q, setQ] = useState('')
+  const [filter, setFilter] = useState('all') // all | choosing | unopened | done | urgent
 
   const load = useCallback(async () => {
     setBusy(true)
@@ -51,87 +69,148 @@ export default function Dashboard() {
     }
   }
 
-  const pending = sessions?.filter((s) => s.status === 'pending').length ?? 0
-  const completed = sessions?.filter((s) => s.status === 'completed').length ?? 0
+  const isUrgent = (s) => s.status === 'pending' && s.expires_at && daysLeft(s.expires_at) >= 0 && daysLeft(s.expires_at) <= 2
+  const stats = useMemo(() => {
+    const all = sessions || []
+    return {
+      choosing: all.filter((s) => sessionState(s) === 'choosing').length,
+      unopened: all.filter((s) => sessionState(s) === 'unopened').length,
+      done: all.filter((s) => s.status === 'completed').length,
+      urgent: all.filter(isUrgent).length,
+    }
+  }, [sessions])
+
+  const shown = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    return (sessions || []).filter((s) => {
+      if (term && !s.client_name.toLowerCase().includes(term)) return false
+      if (filter === 'urgent') return isUrgent(s)
+      if (filter !== 'all') return sessionState(s) === filter
+      return true
+    })
+  }, [sessions, q, filter])
+
+  const branding = useBranding()
+  const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })
+  const tiles = [
+    ['choosing', 'Klien sedang memilih', stats.choosing, 'dark'],
+    ['unopened', 'Belum dibuka', stats.unopened],
+    ['done', 'Selesai dipilih', stats.done],
+    ['urgent', 'Deadline ≤ 2 hari', stats.urgent, 'warn'],
+  ]
 
   return (
     <AdminShell
-      eyebrow="Dashboard"
-      title="Sesi klien"
+      eyebrow={today}
+      title={branding?.studio_name || 'Semua sesi'}
       actions={
-        <div className="flex gap-2">
-          <button type="button" onClick={load} className="btn-ghost h-10 w-10 px-0" aria-label="Muat ulang" disabled={busy}>
+        <div className="flex w-full gap-2 sm:w-auto">
+          <label className="flex h-[46px] min-w-0 flex-1 items-center gap-2 rounded-full border-[1.5px] border-line bg-card px-4 text-mute sm:w-72 sm:flex-none">
+            <Search size={16} />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Cari nama klien…"
+              aria-label="Cari nama klien"
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-ink placeholder:text-faint focus:outline-none focus:ring-0"
+            />
+          </label>
+          <button type="button" onClick={load} className="btn-ghost h-[46px] w-[46px] shrink-0 px-0" aria-label="Muat ulang" disabled={busy}>
             <RefreshCw size={15} className={busy ? 'animate-spin' : ''} />
           </button>
-          <Link to="/admin/new" className="btn-ink h-10">
-            <Plus size={16} /> Sesi baru
-          </Link>
         </div>
       }
     >
       <Toast message={toast} onClose={() => setToast('')} />
 
-      <div className="mb-8 flex gap-8 font-mono text-xs text-mute">
-        <span>
-          <b className="mr-1 text-lg font-medium text-ink">{sessions?.length ?? '–'}</b> sesi
-        </span>
-        <span>
-          <b className="mr-1 text-lg font-medium text-ink">{pending}</b> menunggu
-        </span>
-        <span>
-          <b className="mr-1 text-lg font-medium text-ink">{completed}</b> selesai
-        </span>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {tiles.map(([key, label, n, tone]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setFilter((f) => (f === key ? 'all' : key))}
+            aria-pressed={filter === key}
+            className={clsx(
+              'flex flex-col items-start gap-1.5 rounded-[22px] px-5 py-4 text-left transition-shadow',
+              tone === 'dark' ? 'bg-ink text-paper' : 'bg-card',
+              filter === key && 'ring-2 ring-ink ring-offset-2 ring-offset-paper',
+            )}
+          >
+            <span className={clsx('text-[13px]', tone === 'dark' ? 'text-sand' : 'text-mute')}>{label}</span>
+            <span className={clsx('font-mono text-[38px] leading-none tracking-[-0.04em]', tone === 'dark' && 'text-accent', tone === 'warn' && n > 0 && 'text-danger')}>
+              {sessions ? n : '–'}
+            </span>
+          </button>
+        ))}
       </div>
 
-      {sessions === null ? (
-        <p className="eyebrow animate-pulse">Memuat</p>
-      ) : sessions.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-line px-6 py-16 text-center">
-          <p className="font-display text-3xl">Belum ada sesi</p>
-          <p className="mt-2 text-sm text-mute">Buat sesi pertama: tempel ID folder Drive, tentukan batas foto, bagikan link ke klien.</p>
-          <Link to="/admin/new" className="btn-ink mt-6">
-            <Plus size={16} /> Buat sesi
-          </Link>
-        </div>
-      ) : (
-        <ul className="divide-y divide-line border-t border-line">
-          {sessions.map((s) => (
-            <li key={s.id} className="grid grid-cols-1 gap-3 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <Link to={`/admin/sessions/${s.id}`} className="font-display text-2xl leading-tight hover:underline">
+      <div className="mt-7">
+        {sessions === null ? (
+          <p className="eyebrow animate-pulse">Memuat</p>
+        ) : sessions.length === 0 ? (
+          <div className="rounded-[26px] border-[1.5px] border-dashed border-line px-6 py-16 text-center">
+            <p className="font-display text-4xl italic">Belum ada sesi</p>
+            <p className="mt-2 text-sm text-mute">Buat sesi pertama: tempel link folder Drive, tentukan jumlah foto, bagikan link ke klien.</p>
+            <Link to="/admin/new" className="btn-accent mt-6">
+              <Plus size={16} /> Buat sesi
+            </Link>
+          </div>
+        ) : shown.length === 0 ? (
+          <p className="text-sm text-mute">Tidak ada sesi yang cocok.</p>
+        ) : (
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {shown.map((s) => (
+              <li key={s.id} className="flex flex-col gap-3 rounded-[22px] bg-card p-3">
+                <Link to={`/admin/sessions/${s.id}`} className="grid h-24 shrink-0 grid-cols-3 gap-1 overflow-hidden" aria-label={`Buka sesi ${s.client_name}`}>
+                  {[0, 1, 2].map((i) =>
+                    s.preview_urls?.[i] ? (
+                      <img
+                        key={i}
+                        src={s.preview_urls[i]}
+                        alt=""
+                        loading="lazy"
+                        className={clsx('h-24 w-full min-w-0 bg-wash object-cover', i === 0 ? 'rounded-l-xl rounded-r' : i === 2 ? 'rounded-l rounded-r-xl' : 'rounded')}
+                      />
+                    ) : (
+                      <span key={i} className={clsx('bg-wash', i === 0 ? 'rounded-l-xl rounded-r' : i === 2 ? 'rounded-l rounded-r-xl' : 'rounded')} />
+                    ),
+                  )}
+                </Link>
+                <div className="flex items-center justify-between gap-2 px-1.5">
+                  <Link to={`/admin/sessions/${s.id}`} className="min-w-0 truncate font-display text-[26px] italic leading-none hover:underline">
                     {s.client_name}
                   </Link>
-                  <StatusBadge status={s.status} />
-                  {s.status === 'pending' && <ReadyDot sessionId={s.id} />}
+                  <StatusBadge session={s} />
                 </div>
-                <p className="mt-1 font-mono text-[11px] text-mute">
-                  {fmtDate(s.created_at)}
-                  <span className="mx-2 text-line">|</span>
-                  {s.status === 'completed' ? `${s.selected_count} / ${s.photo_limit} dipilih` : `batas ${s.photo_limit}`}
-                  <span className="mx-2 text-line">|</span>
-                  <span className="select-all">{s.gallery_url.replace(/^https?:\/\//, '')}</span>
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="btn-ghost h-9 px-3 text-xs" onClick={() => copyLink(s)}>
-                  <Copy size={13} /> Link
-                </button>
-                {s.status === 'completed' && (
-                  <>
-                    <button type="button" className="btn-ink h-9 px-3 text-xs" onClick={() => xmp(s)}>
-                      <Download size={13} /> XMP .zip
-                    </button>
-                    <button type="button" className="btn-ghost h-9 px-3 text-xs" onClick={() => copyNames(s)}>
-                      <Copy size={13} /> Nama file
-                    </button>
-                  </>
+                <div className="flex items-center justify-between gap-2 px-1.5 text-xs text-mute">
+                  <span className="font-mono">{countLine(s)}</span>
+                  <span className={clsx(isUrgent(s) && 'font-semibold text-danger')}>{metaLine(s)}</span>
+                </div>
+                {s.status === 'pending' && (
+                  <div className="px-1.5">
+                    <ReadyDot sessionId={s.id} />
+                  </div>
                 )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+                <div className="flex flex-wrap gap-1.5 border-t border-line px-1 pt-3">
+                  <button type="button" className="btn-ghost h-9 px-3 text-xs" onClick={() => copyLink(s)}>
+                    <Copy size={13} /> Link
+                  </button>
+                  {s.status === 'completed' && (
+                    <>
+                      <button type="button" className="btn-ink h-9 px-3 text-xs" onClick={() => xmp(s)}>
+                        <Download size={13} /> XMP
+                      </button>
+                      <button type="button" className="btn-ghost h-9 px-3 text-xs" onClick={() => copyNames(s)}>
+                        <Copy size={13} /> Nama file
+                      </button>
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </AdminShell>
   )
 }

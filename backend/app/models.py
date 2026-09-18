@@ -37,6 +37,14 @@ class PhotoSession(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Client's in-progress picks, saved server-side so they survive a device switch (JSON).
+    draft_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
+    draft_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_epoch: Mapped[int] = mapped_column(Integer, default=0)  # bump = sign out every unlocked device
+    reset_count: Mapped[int] = mapped_column(Integer, default=0)  # bumps so clients drop stale local picks
+    draft_maybe: Mapped[str | None] = mapped_column(Text, nullable=True)  # "tandai dulu" shortlist
+    first_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     @property
     def hard_limit(self) -> int:

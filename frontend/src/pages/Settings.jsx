@@ -124,7 +124,7 @@ export default function Settings() {
               <p className="mt-2 font-display text-4xl">Nama Klien</p>
               <div className="mt-6 grid grid-cols-3 gap-2">
                 {[0, 1, 2].map((i) => (
-                  <div key={i} className="aspect-[3/2] rounded-[3px] bg-wash" />
+                  <div key={i} className="aspect-[3/2] rounded-xl bg-wash" />
                 ))}
               </div>
               <div className="-mx-6 -mb-6">

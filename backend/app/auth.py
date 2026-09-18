@@ -21,6 +21,16 @@ def create_access_token() -> str:
     return jwt.encode({"sub": "admin", "exp": expire}, settings.secret_key, algorithm=ALGORITHM)
 
 
+def is_admin_token(value: str | None) -> bool:
+    """True when an 'Authorization: Bearer …' header value carries a valid admin token."""
+    if not value or not value.lower().startswith("bearer "):
+        return False
+    try:
+        return jwt.decode(value[7:], get_settings().secret_key, algorithms=[ALGORITHM]).get("sub") == "admin"
+    except JWTError:
+        return False
+
+
 def require_admin(creds: HTTPAuthorizationCredentials | None = Depends(bearer)) -> str:
     unauthorized = HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     if creds is None:

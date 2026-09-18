@@ -1,7 +1,10 @@
+import json
 import re
+import time
+from collections import defaultdict
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session as DbSession
 
 from ..auth import create_access_token, require_admin, verify_admin_password
@@ -22,21 +25,44 @@ from ..schemas import (
     TokenResponse,
 )
 from ..services import branding, drive_service, xmp_service
-from .gallery import gallery_token, hash_pin
+from .gallery import clear_pin_fails, hash_pin, image_token
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
+def _previews(s: PhotoSession, n: int = 3) -> list[str]:
+    """Up to n thumbnail URLs for the dashboard card. Uses only the in-memory listing (never calls Drive)."""
+    photos = drive_service._list_cache.get(s.drive_folder_id) or []
+    tok = image_token(s) if s.pin_hash else None
+    urls = []
+    for p in photos[:n]:
+        u = f"/api/gallery/{s.slug}/img/{p.file_id}?size=thumb"
+        urls.append(f"{u}&t={tok}" if tok else u)
+    return urls
+
+
+def _draft_photos(s: PhotoSession) -> list[dict]:
+    """The client's in-progress picks (before they press Kirim), with filenames when known."""
+    if s.status != "pending" and getattr(s.status, "value", s.status) != "pending":
+        return []
+    names = {p.file_id: p.filename for p in (drive_service._list_cache.get(s.drive_folder_id) or [])}
+    notes = json.loads(s.draft_notes or "{}")
+    return [{"drive_file_id": i, "filename": names.get(i, i), "note": notes.get(i)} for i in json.loads(s.draft_ids or "[]")]
+
+
 def _out(s: PhotoSession) -> dict:
-    cols = ("id", "slug", "client_name", "drive_folder_id", "photo_limit", "max_limit", "status", "notes", "expires_at", "created_at", "submitted_at")
+    cols = ("id", "slug", "client_name", "drive_folder_id", "photo_limit", "max_limit", "status", "notes", "expires_at", "created_at", "submitted_at", "first_opened_at", "last_seen_at")
     return {
         **{c: getattr(s, c) for c in cols},
         "has_pin": bool(s.pin_hash),
+        "draft_count": len(json.loads(s.draft_ids or "[]")),
+        "preview_urls": _previews(s),
+        "draft_photos": _draft_photos(s),
         "selected_count": len(s.selected_photos),
         "extra_count": sum(1 for p in s.selected_photos if p.is_extra),
         "gallery_url": f"{get_settings().frontend_url.rstrip('/')}/g/{s.slug}",
         "selected_photos": s.selected_photos,
-        "gallery_token": gallery_token(s) if s.pin_hash else None,
+        "gallery_token": image_token(s) if s.pin_hash else None,  # lets the admin page load thumbnails
     }
 
 
@@ -53,10 +79,28 @@ def _extract_folder_id(value: str) -> str:
     return m.group(1) if m else value.strip()
 
 
+# Admin login brute-force guard: 5 wrong per address and 20 wrong in total per 15 minutes.
+_login_fails: dict[str, list[float]] = defaultdict(list)
+LOGIN_WINDOW_S = 15 * 60
+
+
+def _recent(key: str) -> list[float]:
+    now = time.monotonic()
+    _login_fails[key] = [t for t in _login_fails[key] if now - t < LOGIN_WINDOW_S]
+    return _login_fails[key]
+
+
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest):
+def login(body: LoginRequest, request: Request):
+    ip = request.client.host if request.client else "?"
+    if len(_recent(ip)) >= 5 or len(_recent("*")) >= 20:
+        raise HTTPException(429, "Terlalu banyak percobaan login. Coba lagi dalam 15 menit.")
     if not verify_admin_password(body.password):
+        now = time.monotonic()
+        _login_fails[ip].append(now)
+        _login_fails["*"].append(now)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Password salah")
+    _login_fails.pop(ip, None)
     return TokenResponse(access_token=create_access_token())
 
 
@@ -110,10 +154,21 @@ def get_session(session_id: str, db: DbSession = Depends(get_db)):
 
 
 @router.patch("/sessions/{session_id}", response_model=SessionDetailOut, dependencies=[Depends(require_admin)])
-def update_session(session_id: str, body: SessionUpdate, db: DbSession = Depends(get_db)):
+def update_session(session_id: str, body: SessionUpdate, background: BackgroundTasks, db: DbSession = Depends(get_db)):
     s = _get_or_404(db, session_id)
     if body.client_name is not None:
         s.client_name = body.client_name.strip()
+    if body.drive_folder_id is not None:
+        folder_id = _extract_folder_id(body.drive_folder_id)
+        if folder_id != s.drive_folder_id:
+            try:
+                photos = drive_service.list_photos(folder_id, refresh=True)
+            except drive_service.DriveError as e:
+                raise HTTPException(400, str(e))
+            if not photos:
+                raise HTTPException(400, "Folder tidak berisi foto JPEG/PNG.")
+            s.drive_folder_id = folder_id
+            background.add_task(drive_service.warm_cache, folder_id)
     if body.photo_limit is not None:
         s.photo_limit = body.photo_limit
     if body.max_limit is not None:
@@ -123,8 +178,8 @@ def update_session(session_id: str, body: SessionUpdate, db: DbSession = Depends
     if body.pin is not None:
         if body.pin == "":
             s.pin_hash = None
-        elif not (body.pin.isdigit() and 4 <= len(body.pin) <= 8):
-            raise HTTPException(400, "PIN harus 4–8 digit angka.")
+        elif not (body.pin.isdigit() and len(body.pin) == 4):
+            raise HTTPException(400, "PIN harus 4 digit angka.")
         else:
             s.pin_hash = hash_pin(body.pin)
     if body.clear_expiry:
@@ -170,9 +225,36 @@ def sync_session(session_id: str, background: BackgroundTasks, db: DbSession = D
 
 @router.post("/sessions/{session_id}/reopen", response_model=SessionOut, dependencies=[Depends(require_admin)])
 def reopen_session(session_id: str, db: DbSession = Depends(get_db)):
-    """Let the client pick again (clears the previous selection)."""
+    """Let the client pick again. Their previous picks & notes become the starting draft."""
+    s = _get_or_404(db, session_id)
+    s.draft_ids = json.dumps([p.drive_file_id for p in s.selected_photos])
+    s.draft_notes = json.dumps({p.drive_file_id: p.note for p in s.selected_photos if p.note})
+    s.selected_photos.clear()
+    s.status = "pending"
+    s.submitted_at = None
+    db.commit()
+    db.refresh(s)
+    return _out(s)
+
+
+@router.post("/sessions/{session_id}/relock", response_model=SessionDetailOut, dependencies=[Depends(require_admin)])
+def relock_session(session_id: str, db: DbSession = Depends(get_db)):
+    """Sign out every device that unlocked this gallery (PIN stays the same) and clear PIN lockouts."""
+    s = _get_or_404(db, session_id)
+    s.access_epoch = (s.access_epoch or 0) + 1
+    db.commit()
+    db.refresh(s)
+    clear_pin_fails(s.slug)
+    return _out(s)
+
+
+@router.post("/sessions/{session_id}/reset", response_model=SessionOut, dependencies=[Depends(require_admin)])
+def reset_session(session_id: str, db: DbSession = Depends(get_db)):
+    """Start over: wipe submitted picks, the client's draft, notes and "tandai" marks."""
     s = _get_or_404(db, session_id)
     s.selected_photos.clear()
+    s.draft_ids = s.draft_notes = s.draft_maybe = None
+    s.reset_count = (s.reset_count or 0) + 1
     s.status = "pending"
     s.submitted_at = None
     db.commit()

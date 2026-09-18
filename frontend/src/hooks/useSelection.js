@@ -18,15 +18,24 @@ const write = (key, v) => {
  * Selection + per-photo notes, persisted per gallery so a refresh on mobile
  * doesn't lose picks. `limit` is the hard cap (package + allowed extras).
  */
-export function useSelection(slug, limit, initial = []) {
+export function useSelection(slug, limit, initial = [], initialNotes = {}, initialMaybe = []) {
   const idsKey = `psp_sel_${slug}`
   const notesKey = `psp_notes_${slug}`
+  const maybeKey = `psp_maybe_${slug}`
   const [ids, setIds] = useState(() => (initial.length ? initial : read(idsKey, [])))
-  const [notes, setNotes] = useState(() => read(notesKey, {}))
+  // Server copy (saved from any device) wins; the local copy covers an offline moment.
+  const [notes, setNotes] = useState(() => (initial.length ? initialNotes : read(notesKey, {})))
+  // "Tandai dulu": a shortlist of photos the client is unsure about. Doesn't count toward the quota.
+  const [maybe, setMaybe] = useState(() => (initial.length || initialMaybe.length ? initialMaybe : read(maybeKey, [])))
   const [warning, setWarning] = useState('')
 
   useEffect(() => write(idsKey, ids), [idsKey, ids])
   useEffect(() => write(notesKey, notes), [notesKey, notes])
+  useEffect(() => write(maybeKey, maybe), [maybeKey, maybe])
+
+  const toggleMaybe = useCallback((id) => {
+    setMaybe((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }, [])
 
   const toggle = useCallback(
     (id) => {
@@ -36,6 +45,7 @@ export function useSelection(slug, limit, initial = []) {
           setWarning(`Maksimal ${limit} foto. Batalkan salah satu untuk mengganti.`)
           return prev
         }
+        setMaybe((m) => (m.includes(id) ? m.filter((x) => x !== id) : m)) // picked → no longer "maybe"
         return [...prev, id]
       })
     },
@@ -54,18 +64,24 @@ export function useSelection(slug, limit, initial = []) {
   const clear = useCallback(() => {
     setIds([])
     setNotes({})
+    setMaybe([])
     try {
       localStorage.removeItem(idsKey)
       localStorage.removeItem(notesKey)
+      localStorage.removeItem(maybeKey)
     } catch {}
-  }, [idsKey, notesKey])
+  }, [idsKey, notesKey, maybeKey])
 
   const set = useMemo(() => new Set(ids), [ids])
+  const maybeSet = useMemo(() => new Set(maybe), [maybe])
   return {
     ids,
     set,
     notes,
     setNote,
+    maybe,
+    maybeSet,
+    toggleMaybe,
     count: ids.length,
     atLimit: ids.length >= limit,
     toggle,

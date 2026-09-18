@@ -1,95 +1,167 @@
 # Pilih Foto — Platform Seleksi Foto Interaktif
 
-Portal *client-proofing* untuk fotografer. Klien memilih foto lewat galeri bergaya clean-editorial di HP/desktop; fotografer mendapatkan file **XMP sidecar** (★5 + label hijau) siap disinkronkan ke Capture One / Lightroom — tanpa mencatat nama file manual.
+Portal *client-proofing* untuk fotografer. Klien memilih foto lewat galeri di HP/desktop; fotografer mendapatkan file **XMP sidecar** (★5 + label warna) siap disinkronkan ke Capture One / Lightroom — tanpa mencatat nama file manual.
 
-Semua komponen gratis: FastAPI + SQLite, React + Vite + Tailwind, Google Drive API (service account), Google Fonts.
+Semua komponen gratis: FastAPI + SQLite, React + Vite + Tailwind, Google Drive API, Google Fonts.
 
-## Tech stack
+---
 
-| Layer | Teknologi |
-|---|---|
-| Backend | Python 3.12 · FastAPI · SQLAlchemy 2 · Pillow · SQLite (Postgres opsional) |
-| Foto | Google Drive API v3 (API key atau service account) + thumbnail Pillow + cache lokal |
-| Frontend | React 18 · Vite · Tailwind CSS · lucide-react |
-| Auth admin | Password tunggal → JWT |
+## Cara cepat menjalankan (Windows)
 
-## Menjalankan lokal
+1. **Klik dua kali `jalankan.bat`** di folder utama.
+   Ini akan *build* tampilan website lalu menyalakan server. Tunggu sampai muncul
+   `Uvicorn running on http://0.0.0.0:8000`.
+2. Buka **http://localhost:8000/admin** dan login dengan `ADMIN_PASSWORD` dari `backend/.env`.
+3. Supaya klien bisa membuka dari internet, jalankan ngrok di jendela lain:
+   ```
+   ngrok http 8000 --url=DOMAIN-KAMU.ngrok-free.dev
+   ```
+   Lalu buka admin lewat alamat ngrok itu (`https://DOMAIN-KAMU.ngrok-free.dev/admin`),
+   supaya link yang dibagikan ke klien memakai alamat ngrok.
+
+> **Setiap kali kode diubah**, tutup jendela `jalankan.bat` lalu klik dua kali lagi supaya build diperbarui.
+
+### Persiapan pertama kali (sekali saja)
 
 Prasyarat: Python 3.11+, Node 18+.
 
 ```bash
 # Backend
 cd backend
-cp .env.example .env            # ubah ADMIN_PASSWORD & SECRET_KEY
+copy .env.example .env          # lalu edit isinya (lihat bagian Pengaturan)
 python -m venv venv
-venv\Scripts\activate           # Windows   |   source venv/bin/activate (Mac/Linux)
+venv\Scripts\activate
 pip install -r requirements.txt
-python dev.py                   # http://localhost:8000  (docs: /docs)
-```
 
-```bash
-# Frontend (terminal kedua)
-cd frontend
+# Frontend
+cd ..\frontend
 npm install
-npm run dev                     # http://localhost:5173
 ```
 
-Login admin: `http://localhost:5173/admin/login` dengan `ADMIN_PASSWORD` dari `.env`.
+### Mode development (untuk mengubah kode)
 
-> **Tanpa Google Drive (mode mock):** jika `GOOGLE_API_KEY` kosong dan `service_account.json` tidak ada, backend otomatis memakai 24 foto placeholder (picsum.photos). Seluruh alur — buat sesi, galeri, submit, export XMP — bisa dicoba tanpa kredensial apa pun.
+Dua terminal: `cd backend && python dev.py` (port 8000) dan `cd frontend && npm run dev` (port 5173, buka `http://localhost:5173/admin`). Perubahan kode langsung terlihat, tapi **lambat jika diakses lewat ngrok** — untuk klien selalu pakai `jalankan.bat`.
 
-### Docker
+---
 
-```bash
-docker compose up
-```
+## Pengaturan (`backend/.env`)
+
+| Kunci | Keterangan |
+|---|---|
+| `ADMIN_PASSWORD` | Password login admin. **Wajib diganti** sebelum dibuka ke internet (server memberi peringatan jika masih bawaan). |
+| `SECRET_KEY` | Kunci rahasia. Isi sekali di awal lalu jangan diubah — mengubahnya membuat PIN sesi lama tidak berlaku. |
+| `FRONTEND_URL` | Alamat publik untuk link galeri, mis. `https://DOMAIN-KAMU.ngrok-free.dev`. Restart server setelah mengubah. |
+| `GOOGLE_API_KEY` | Untuk folder Drive publik (lihat di bawah). |
+| `CACHE_RETENTION_DAYS` | Lama cache foto disimpan setelah sesi selesai (bawaan 30 hari). |
+
+Tanpa Google Drive (API key kosong dan `service_account.json` tidak ada), aplikasi memakai 24 foto contoh sehingga seluruh alur bisa dicoba.
 
 ## Menghubungkan Google Drive
 
-Pilih salah satu. Keduanya gratis.
+**Cara 1 — API key + folder publik (paling mudah)**
+1. [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Enable **Google Drive API**.
+2. Credentials → Create credentials → **API key** → isi `GOOGLE_API_KEY` di `.env`.
+3. Folder foto di Drive: Share → *Anyone with the link* → Viewer.
 
-### Cara 1 — API key + folder publik (paling mudah)
+**Cara 2 — Service account (folder privat)**
+1. IAM & Admin → Service Accounts → buat → Keys → Add key → JSON.
+2. Simpan sebagai `backend/service_account.json`, lalu share folder ke `client_email` di file itu (Viewer).
 
-Tidak butuh OAuth atau kunci JSON, dan tidak terpengaruh kebijakan organisasi yang memblokir *service account key*.
+Saat membuat sesi, tempel **link folder** atau ID-nya. Foto diambil dalam ukuran kecil (grid) dan besar (preview), lalu di-cache di `backend/cache/` — file asli tidak pernah diunduh.
 
-1. [Google Cloud Console](https://console.cloud.google.com) → pilih/buat project → **APIs & Services → Enable APIs and Services → Google Drive API → Enable**.
-2. **APIs & Services → Credentials → + Create credentials → API key**. Salin key-nya.
-   *(Opsional tapi disarankan: Edit key → API restrictions → Restrict key → centang hanya Google Drive API.)*
-3. Di `backend/.env` isi: `GOOGLE_API_KEY=AIza...`
-4. Di Google Drive, klik kanan folder foto → **Share → General access: Anyone with the link → Viewer**.
-5. Restart backend. `GET /api/health` harus menjawab `"drive_mode": "api_key"`.
-
-Folder harus publik-dengan-link (siapa pun yang punya link bisa melihat). Link galeri klien sendiri hanya berisi foto dari backend, bukan link Drive.
-
-### Cara 2 — Service account (folder privat)
-
-1. Enable **Google Drive API** seperti di atas.
-2. **IAM & Admin → Service Accounts → Create service account** → tab **Keys → Add key → JSON**.
-3. Simpan sebagai `backend/service_account.json` (sudah di-`.gitignore`).
-4. **Share** folder foto ke `client_email` dari file JSON, akses **Viewer**.
-5. Restart backend → `"drive_mode": "service_account"`.
-
-> Jika muncul *"Service account key creation is disabled"*, project Anda berada di bawah organisasi yang memblokirnya — pakai Cara 1.
-
-Saat membuat sesi, tempel **link folder** atau ID-nya (bagian setelah `/folders/`) — keduanya diterima. Gambar diambil dalam ukuran 640 px (grid) dan 2048 px (lightbox) langsung dari Drive, lalu di-cache di `backend/cache/` — file asli 15 MB tidak pernah diunduh. Saat sesi dibuat, cache dipanaskan di latar belakang.
+---
 
 ## Alur kerja
 
-1. **Persiapan** — ekspor JPEG kecil ke satu folder Drive.
-2. **Buat sesi** — Admin → *Sesi baru*: nama klien, folder Drive, **foto dalam paket**, opsional **maksimal dengan tambahan** (klien boleh melebihi paket; kelebihannya dicatat sebagai *extra*), **PIN** 4–8 digit, dan **tanggal kedaluwarsa**. Sistem memvalidasi folder dan membuat link unik `/g/<slug>`.
-3. **Bagikan** — salin link, kirim ke klien.
-4. **Klien memilih** — (masukkan PIN jika ada) galeri masonry, ketuk untuk memilih, ikon sudut untuk memperbesar (lightbox, geser di HP) dan **menulis catatan** per foto ("crop lebih ketat", dll). Pilihan & catatan tersimpan di browser klien jika halaman ditutup. Counter menampilkan `05 / 03 +2` saat melebihi paket; tombol *Kirim* aktif setelah ≥1 foto.
-5. **Submit** — konfirmasi → status sesi jadi *Selesai*; galeri berubah read-only dengan foto pilihan ditandai.
-6. **Export** — Admin → sesi → **XMP .zip** / **Salin nama file** / **CSV**.
-7. **Editing** — ekstrak ZIP ke folder RAW. Capture One: *Image → Synchronize Metadata*. Lightroom: *Metadata → Read Metadata from File*. Foto pilihan mendapat **Rating 5** dan **Label Green**; foto **di luar paket** mendapat **Label Yellow**; catatan klien masuk ke **Caption/Description**. CSV memuat kolom `extra` dan `note`.
+1. **Persiapan** — ekspor JPEG ukuran web ke satu folder Drive.
+2. **Buat sesi** — Admin → *Sesi baru*: nama klien, link folder, jumlah foto dalam paket, (opsional) maksimal dengan tambahan, **PIN 4 digit** (tombol *Acak*), dan tanggal kedaluwarsa.
+3. **Bagikan** — tunggu indikator **"Galeri siap dibagikan"**, lalu tekan **Kirim lewat WhatsApp** (pesan + link + PIN otomatis) atau **Salin** link.
+4. **Klien memilih**:
+   - intro studio (logo, nama, tagline) dan panduan singkat (bisa dibuka lagi lewat tombol **Cara memilih**);
+   - ketuk foto untuk memilih, ikon ⤢ untuk melihat besar dan menulis **catatan**, ikon bookmark untuk **Tandai dulu** (masih ragu);
+   - pilihan **tersimpan otomatis di server** — bisa dilanjutkan dari HP/laptop lain;
+   - saat melewati kuota paket muncul pop-up konfirmasi, dan foto di luar paket diberi label **Tambahan**;
+   - layar konfirmasi menampilkan semua foto; klien bisa memilih sendiri foto mana yang jadi tambahan.
+5. **Hasil** — Admin → sesi: foto pilihan (klik untuk memperbesar + lihat catatan), lalu **XMP .zip** / **Salin nama file** / **CSV**.
+6. **Editing** — ekstrak ZIP ke folder RAW. Capture One: *Image → Synchronize Metadata*. Lightroom: *Metadata → Read Metadata from File*. Foto pilihan: **Rating 5 + label hijau**; foto tambahan: **label kuning**; catatan klien masuk ke **Caption/Description**.
 
-Di halaman sesi admin bisa mengubah kuota, PIN, dan masa berlaku kapan saja (*Ubah kuota, PIN, atau masa berlaku*). Menu **Studio** menyimpan nama studio, tagline, kontak, dan logo yang tampil di galeri klien.
+### Fitur admin
 
-Admin juga bisa **Buka lagi** sesi (hapus pilihan, klien memilih ulang), **Sinkronkan** (baca ulang folder Drive bila foto ditambah/dihapus), atau **Hapus sesi**.
+- **Dashboard**: ringkasan (sedang memilih, belum dibuka, selesai, deadline ≤ 2 hari — klik untuk menyaring), pencarian klien, kartu sesi dengan pratinjau foto.
+- **Detail sesi**: aktivitas klien (kapan dibuka), pilihan sementara yang sedang dipilih klien, dan tombol:
+  - **Edit sesi** — ubah nama, link folder Drive (jika salah tempel), kuota, PIN, masa berlaku, catatan;
+  - **Sinkronkan** — baca ulang folder bila foto ditambah/dihapus;
+  - **Buka lagi** — klien bisa mengubah pilihan (pilihan lama jadi titik awal);
+  - **Reset pilihan** — hapus semua pilihan, catatan, dan tanda; klien mulai dari nol;
+  - **Kunci ulang perangkat** — semua perangkat harus memasukkan PIN lagi (PIN tetap sama);
+  - **Hapus sesi**.
+- **Mode pratinjau**: galeri yang dibuka saat login sebagai admin tidak mengubah pilihan/aktivitas klien. Untuk mencoba sebagai klien, buka link di jendela Incognito.
+- **Studio & logo**: nama studio, tagline, kontak, dan logo (PNG transparan didukung) untuk intro dan galeri.
 
-Di halaman sesi ada indikator **"Menyiapkan galeri… n / total"** → **"Galeri siap dibagikan"**; bagikan link setelah siap agar klien tidak menunggu thumbnail. Klien punya toggle **Semua / Pilihan** di bar bawah untuk meninjau ulang pilihannya sebelum mengirim.
+### Mengubah teks pesan WhatsApp
 
-Cache gambar dibersihkan otomatis saat backend start untuk sesi yang selesai lebih dari `CACHE_RETENTION_DAYS` (default 30) hari, dan saat sesi dihapus.
+Buka `frontend/src/pages/SessionDetail.jsx`, cari komentar **`TEKS PESAN WHATSAPP`**. Setiap baris di dalam `[ ... ]` = satu baris di WA, `''` = baris kosong. Jangan hapus bagian `${...}` (terisi otomatis). Setelah mengubah, jalankan ulang `jalankan.bat`.
+
+---
+
+## Keamanan
+
+- **PIN galeri 4 digit.** Salah tebak dibatasi 5×/pengunjung dan 10×/galeri per 15 menit.
+- Perangkat yang sudah membuka galeri tetap terbuka **7 hari**; link gambar hanya berlaku **±12 jam** (link foto yang disalin cepat mati).
+- Mengganti PIN atau menekan **Kunci ulang perangkat** membatalkan semua akses lama.
+- **Login admin** dibatasi 5 salah/alamat dan 20 salah total per 15 menit.
+- Galeri yang kedaluwarsa tertutup untuk klien.
+
+## Backup
+
+Setiap kali server dinyalakan, database disalin ke `backend/backups/` (satu per hari, 14 hari terakhir disimpan). Untuk memulihkan: matikan server, salin file backup menjadi `backend/photo_platform.db`, nyalakan lagi.
+
+Cache foto dibersihkan otomatis untuk sesi yang selesai lebih dari `CACHE_RETENTION_DAYS` hari, dan saat sesi dihapus.
+
+---
+
+## Masalah umum
+
+| Gejala | Solusi |
+|---|---|
+| Link galeri masih `localhost` | Buka admin lewat alamat ngrok, atau isi `FRONTEND_URL` di `backend/.env` lalu restart server. |
+| `ERR_NGROK_334 … already online` | Ada ngrok lain yang masih jalan: tutup jendelanya atau `taskkill /f /im ngrok.exe`. |
+| Klien melihat halaman "You are about to visit…" | Halaman peringatan ngrok gratis — tekan **Visit Site**. |
+| Foto lama muncul / kosong saat pertama dibuka | Foto masih diambil dari Drive; tunggu "Galeri siap dibagikan" sebelum membagikan link. |
+| "Terlalu banyak percobaan PIN" | Tunggu 15 menit, atau admin menekan **Kunci ulang perangkat**. |
+| Perubahan kode tidak terlihat | Tutup lalu jalankan ulang `jalankan.bat` (build ulang), lalu Ctrl+F5 di browser. |
+
+---
+
+## Tech stack
+
+| Layer | Teknologi |
+|---|---|
+| Backend | Python · FastAPI · SQLAlchemy 2 · Pillow · SQLite |
+| Foto | Google Drive API v3 (API key / service account) + cache lokal |
+| Frontend | React 18 · Vite · Tailwind CSS · lucide-react |
+| Font | Bricolage Grotesque · Instrument Serif · JetBrains Mono |
+
+## Struktur
+
+```
+jalankan.bat              # build + jalankan (mode production, port 8000)
+backend/
+  dev.py                  # launcher development (auto-reload)
+  app/
+    main.py               # app, backup harian, sajikan hasil build frontend
+    config.py database.py models.py schemas.py auth.py
+    routers/admin.py      # login, sesi, edit, reset, kunci ulang, export
+    routers/gallery.py    # galeri klien, PIN & token akses, simpan otomatis, submit
+    services/             # drive_service (Drive + cache), xmp_service, branding
+  backups/                # salinan database harian
+frontend/src/
+  pages/      Gallery · Dashboard · SessionDetail · NewSession · Settings · Login
+  components/ Intro · Guide · PhotoTile · Lightbox · SelectionBar · PinGate ·
+              AdminShell · AdminPhotoGrid · AccessEditor · StatusBadge · …
+  hooks/      useSelection (pilihan + tanda) · useColumns (masonry) · useClipboard
+  utils/      pin.js (PIN acak, ingat PIN di browser admin)
+```
 
 ## API ringkas
 
@@ -97,41 +169,11 @@ Cache gambar dibersihkan otomatis saat backend start untuk sesi yang selesai leb
 |---|---|---|
 | POST | `/api/admin/login` | `{password}` → JWT |
 | GET/POST | `/api/admin/sessions` | daftar / buat sesi |
-| POST | `/api/admin/check-folder` | validasi folder Drive |
-| GET/DELETE | `/api/admin/sessions/{id}` | detail / hapus (cache folder dibersihkan jika tak dipakai sesi lain) |
-| GET | `/api/admin/sessions/{id}/cache` | progres cache: `total`, `thumb`, `full`, `ready` |
-| POST | `/api/admin/sessions/{id}/sync` | baca ulang folder Drive + panaskan cache |
-| PATCH | `/api/admin/sessions/{id}` | ubah kuota / PIN / kedaluwarsa |
-| POST | `/api/admin/sessions/{id}/reopen` | buka kembali |
-| GET/PUT | `/api/admin/branding` · `POST/DELETE …/logo` | identitas studio |
+| GET/PATCH/DELETE | `/api/admin/sessions/{id}` | detail / ubah / hapus |
+| POST | `/api/admin/sessions/{id}/sync` · `/reopen` · `/reset` · `/relock` | sinkron / buka lagi / reset pilihan / kunci ulang perangkat |
 | GET | `/api/admin/sessions/{id}/export/{xmp,filenames,csv}` | export |
-| GET | `/api/gallery/{slug}/meta` | nama klien, `locked`, `expired`, branding |
-| POST | `/api/gallery/{slug}/unlock` | `{pin}` → `{token}` (header `X-Gallery-Token`, atau `?t=` untuk gambar) |
-| GET | `/api/gallery/{slug}` | data galeri (butuh token jika ber-PIN) |
-| GET | `/api/gallery/{slug}/img/{file_id}?size=thumb\|full` | proxy gambar (cache 7 hari) |
-| POST | `/api/gallery/{slug}/submit` | `{file_ids: [], notes: {file_id: text}}` |
-
-Gambar tidak pernah di-link langsung ke Drive: backend mengunduhnya sekali, membuat thumbnail, dan menyimpannya di `backend/cache/`, sehingga link galeri tetap hidup berminggu-minggu (thumbnail Drive asli kedaluwarsa dalam hitungan jam).
-
-## Deployment
-
-- **Backend** (Railway/Render/Fly): set env dari `.env.example`, `DATABASE_URL` Postgres bila perlu, set `GOOGLE_API_KEY` (atau upload `service_account.json` sebagai secret file), `FRONTEND_URL` = domain frontend.
-- **Frontend** (Vercel/Netlify): build `npm run build`, output `dist`. Tambahkan rewrite `/api/*` → URL backend (atau jalankan keduanya di satu domain lewat reverse proxy).
-
-## Struktur
-
-```
-backend/
-  dev.py                  # launcher dev (reload)
-  app/
-    main.py  config.py  database.py  models.py  schemas.py  auth.py
-    routers/admin.py      # login, sesi, export
-    routers/gallery.py    # galeri publik, proxy gambar, submit
-    services/drive_service.py   # Drive API + mock + cache
-    services/xmp_service.py     # XMP / ZIP / CSV
-    services/branding.py        # identitas studio + logo
-frontend/src/
-  pages/      Gallery · Login · Dashboard · NewSession · SessionDetail · Settings
-  components/ PhotoTile · Lightbox (catatan) · SelectionBar · PinGate · Brand · AccessEditor · …
-  hooks/      useSelection (persist per galeri) · useColumns (masonry) · useClipboard
-```
+| GET | `/api/gallery/{slug}/meta` · `/api/gallery/{slug}` | info & data galeri |
+| POST | `/api/gallery/{slug}/unlock` | `{pin}` → token akses (7 hari) |
+| PUT | `/api/gallery/{slug}/draft` | simpan otomatis pilihan, catatan, tanda |
+| POST | `/api/gallery/{slug}/submit` | kirim pilihan final (+ foto tambahan pilihan klien) |
+| GET | `/api/gallery/{slug}/img/{file_id}?size=thumb\|full&t=…` | proxy gambar |

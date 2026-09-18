@@ -10,14 +10,32 @@ const download = async (url, fallbackName) => {
   URL.revokeObjectURL(href)
 }
 
+// If the backend still thinks it lives on localhost (FRONTEND_URL not set, or not restarted)
+// but the admin is being used through a public address (ngrok, a domain), build the client
+// link from the address in the browser instead, so links sent to clients always work.
+const isLocal = (host) => /^(localhost|127\.0\.0\.1|\[::1\])$/.test(host)
+const fixLink = (s) => {
+  if (!s || !s.slug || !s.gallery_url) return s
+  try {
+    const linkHost = new URL(s.gallery_url).hostname
+    if (isLocal(linkHost) && !isLocal(window.location.hostname)) {
+      return { ...s, gallery_url: `${window.location.origin}/g/${s.slug}` }
+    }
+  } catch {}
+  return s
+}
+const fixAll = (list) => list.map(fixLink)
+
 export const adminApi = {
   login: (password) => api.post('/admin/login', { password }).then((r) => r.data),
-  listSessions: () => api.get('/admin/sessions').then((r) => r.data),
-  getSession: (id) => api.get(`/admin/sessions/${id}`).then((r) => r.data),
-  createSession: (body) => api.post('/admin/sessions', body).then((r) => r.data),
+  listSessions: () => api.get('/admin/sessions').then((r) => fixAll(r.data)),
+  getSession: (id) => api.get(`/admin/sessions/${id}`).then((r) => fixLink(r.data)),
+  createSession: (body) => api.post('/admin/sessions', body).then((r) => fixLink(r.data)),
   deleteSession: (id) => api.delete(`/admin/sessions/${id}`),
-  reopenSession: (id) => api.post(`/admin/sessions/${id}/reopen`).then((r) => r.data),
-  updateSession: (id, body) => api.patch(`/admin/sessions/${id}`, body).then((r) => r.data),
+  relockSession: (id) => api.post(`/admin/sessions/${id}/relock`).then((r) => fixLink(r.data)),
+  resetSession: (id) => api.post(`/admin/sessions/${id}/reset`).then((r) => fixLink(r.data)),
+  reopenSession: (id) => api.post(`/admin/sessions/${id}/reopen`).then((r) => fixLink(r.data)),
+  updateSession: (id, body) => api.patch(`/admin/sessions/${id}`, body).then((r) => fixLink(r.data)),
   getBranding: () => api.get('/admin/branding').then((r) => r.data),
   putBranding: (body) => api.put('/admin/branding', body).then((r) => r.data),
   uploadLogo: (file) => {
@@ -26,7 +44,7 @@ export const adminApi = {
     return api.post('/admin/branding/logo', fd).then((r) => r.data)
   },
   deleteLogo: () => api.delete('/admin/branding/logo').then((r) => r.data),
-  syncSession: (id) => api.post(`/admin/sessions/${id}/sync`).then((r) => r.data),
+  syncSession: (id) => api.post(`/admin/sessions/${id}/sync`).then((r) => fixLink(r.data)),
   cacheStatus: (id) => api.get(`/admin/sessions/${id}/cache`).then((r) => r.data),
   checkFolder: (drive_folder_id) => api.post('/admin/check-folder', { drive_folder_id }).then((r) => r.data),
   filenames: (id) => api.get(`/admin/sessions/${id}/export/filenames`).then((r) => r.data),

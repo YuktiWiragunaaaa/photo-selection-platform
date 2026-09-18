@@ -47,7 +47,7 @@ class SessionCreate(BaseModel):
     photo_limit: int = Field(ge=1, le=1000)
     max_limit: int | None = Field(None, ge=1, le=2000)
     notes: str | None = None
-    pin: str | None = Field(None, min_length=4, max_length=8, pattern=r"^\d+$")
+    pin: str | None = Field(None, min_length=4, max_length=4, pattern=r"^\d{4}$")
     expires_at: datetime | None = None
 
     @field_validator("max_limit")
@@ -60,6 +60,7 @@ class SessionCreate(BaseModel):
 
 class SessionUpdate(BaseModel):
     client_name: str | None = Field(None, min_length=1, max_length=255)
+    drive_folder_id: str | None = Field(None, min_length=1, max_length=255)
     photo_limit: int | None = Field(None, ge=1, le=1000)
     max_limit: int | None = Field(None, ge=1, le=2000)
     notes: str | None = None
@@ -90,13 +91,24 @@ class SessionOut(BaseModel):
     expires_at: datetime | None
     created_at: datetime
     submitted_at: datetime | None
+    first_opened_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    draft_count: int = 0
+    preview_urls: list[str] = []
     selected_count: int
     extra_count: int
     gallery_url: str
 
 
+class DraftPhotoOut(BaseModel):
+    drive_file_id: str
+    filename: str
+    note: str | None = None
+
+
 class SessionDetailOut(SessionOut):
     selected_photos: list[SelectedPhotoOut]
+    draft_photos: list[DraftPhotoOut] = []
     gallery_token: str | None = None  # lets the admin page load images of a PIN-protected gallery
 
 
@@ -125,6 +137,7 @@ class GalleryMeta(BaseModel):
     client_name: str
     locked: bool
     expired: bool
+    preview: bool = False  # opened by the logged-in photographer
     branding: Branding
 
 
@@ -136,7 +149,17 @@ class GalleryOut(BaseModel):
     photos: list[Photo]
     selected_ids: list[str]
     notes: dict[str, str]
+    maybe_ids: list[str] = []
+    rev: int = 0
+    preview: bool = False  # photographer preview: nothing is saved, client's picks untouched
+    expires_at: datetime | None = None
     branding: Branding
+
+
+class DraftRequest(BaseModel):
+    file_ids: list[str] = []
+    notes: dict[str, str] = {}
+    maybe_ids: list[str] = []
 
 
 class UnlockRequest(BaseModel):
@@ -150,6 +173,8 @@ class UnlockOut(BaseModel):
 class SubmitRequest(BaseModel):
     file_ids: list[str] = Field(min_length=1)
     notes: dict[str, str] = {}
+    # Which picks the client marks as paid extras; if omitted, the last picks are extras.
+    extra_ids: list[str] | None = None
 
 
 class SubmitOut(BaseModel):
