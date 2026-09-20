@@ -1,3 +1,4 @@
+// [ID] Menyimpan pilihan, catatan, dan tanda klien (di perangkat + dikirim ke server).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 const read = (key, fallback) => {

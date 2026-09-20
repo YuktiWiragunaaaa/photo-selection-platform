@@ -11,7 +11,7 @@ export default function Toast({ message, onClose, duration = 2600 }) {
   return (
     <div
       role="status"
-      className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 animate-rise rounded-full bg-ink px-4 py-2 text-sm text-paper shadow-lg"
+      className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 animate-rise rounded-full bg-solid px-4 py-2 text-sm text-onsolid shadow-lg"
     >
       {message}
     </div>

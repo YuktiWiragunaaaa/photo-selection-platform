@@ -1,3 +1,4 @@
+# [ID] Struktur tabel database (sesi, foto terpilih, pengaturan).
 import enum
 import secrets
 import uuid
@@ -45,6 +46,10 @@ class PhotoSession(Base):
     draft_maybe: Mapped[str | None] = mapped_column(Text, nullable=True)  # "tandai dulu" shortlist
     first_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Nomor WhatsApp klien (opsional), disimpan tanpa + dan tanpa 0 di depan: 6281234567890
+    client_wa: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Kapan admin terakhir membuka hasil sesi ini; dipakai untuk penanda "baru selesai" di dashboard.
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     @property
     def hard_limit(self) -> int:
@@ -76,3 +81,12 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+class FailedAttempt(Base):
+    """Satu baris = satu percobaan salah (PIN galeri atau login admin). Dipakai pembatas percobaan."""
+
+    __tablename__ = "failed_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(128), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

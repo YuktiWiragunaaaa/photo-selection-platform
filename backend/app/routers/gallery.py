@@ -1,10 +1,11 @@
+# [ID] API untuk KLIEN: galeri, PIN & token akses, simpan otomatis, kirim pilihan, gambar & video intro.
 import hashlib
 import hmac
 import json
+import re
 import time
-from collections import defaultdict
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session as DbSession
@@ -14,7 +15,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..models import PhotoSession, SelectedPhoto, SessionStatus, utcnow
 from ..schemas import Branding, DraftRequest, GalleryMeta, GalleryOut, Photo, SubmitOut, SubmitRequest, UnlockOut, UnlockRequest
-from ..services import branding, drive_service
+from ..services import backup, branding, drive_service, ratelimit
 
 router = APIRouter(prefix="/api", tags=["gallery"])
 
@@ -28,24 +29,20 @@ NOTE_MAX = 300
 PIN_MAX_FAILS = 5
 PIN_MAX_FAILS_GALLERY = 10
 PIN_WINDOW_S = 15 * 60
-_pin_fails: dict[str, list[float]] = defaultdict(list)
+# Hitungannya disimpan di database, jadi tidak ikut hilang saat server dinyalakan ulang.
 
 
 def _fail_key(slug: str, request: Request) -> str:
     ip = request.client.host if request.client else "?"
-    return f"{slug}:{ip}"
+    return f"pin:{slug}:{ip}"
 
 
-def clear_pin_fails(slug: str) -> None:
-    for k in [k for k in _pin_fails if k == slug or k.startswith(f"{slug}:")]:
-        _pin_fails.pop(k, None)
+def _gallery_key(slug: str) -> str:
+    return f"pin:{slug}"
 
 
-def _recent_fails(key: str) -> list[float]:
-    now = time.monotonic()
-    fails = [t for t in _pin_fails[key] if now - t < PIN_WINDOW_S]
-    _pin_fails[key] = fails
-    return fails
+def clear_pin_fails(db: DbSession, slug: str) -> None:
+    ratelimit.clear_prefix(db, f"pin:{slug}")
 
 
 def _clean_notes(notes: dict[str, str], ids: list[str]) -> dict[str, str]:
@@ -125,6 +122,36 @@ def _img(slug: str, file_id: str, size: str, token: str | None) -> str:
 
 
 # ---------------------------------------------------------------- endpoints
+@router.get("/branding", response_model=Branding)
+def public_branding(db: DbSession = Depends(get_db)):
+    """Studio identity + theme, used by every page to apply colours/fonts before rendering."""
+    return branding.get(db)
+
+
+@router.get("/branding/intro-video/{variant}")
+def intro_video(variant: str, request: Request):
+    """Serve the intro clip with HTTP Range support (iPhone Safari won't play video without it)."""
+    p = branding.video_path(variant) if variant in branding.VIDEO_VARIANTS else None
+    if not p:
+        raise HTTPException(404)
+    size = p.stat().st_size
+    media = "video/mp4" if p.suffix == ".mp4" else "video/webm"
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "public, max-age=86400"}
+    rng = request.headers.get("range", "")
+    m = re.match(r"bytes=(\d*)-(\d*)", rng)
+    if not m:
+        return FileResponse(p, media_type=media, headers=headers)
+    start = int(m.group(1)) if m.group(1) else max(0, size - int(m.group(2) or 0))
+    end = min(int(m.group(2)), size - 1) if m.group(1) and m.group(2) else size - 1
+    if start >= size or start > end:
+        return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
+    with p.open("rb") as f:
+        f.seek(start)
+        data = f.read(end - start + 1)
+    headers.update({"Content-Range": f"bytes {start}-{end}/{size}", "Content-Length": str(len(data))})
+    return Response(data, status_code=206, media_type=media, headers=headers)
+
+
 @router.get("/branding/logo")
 def branding_logo():
     p = branding.logo_path()
@@ -151,16 +178,14 @@ def unlock(slug: str, body: UnlockRequest, request: Request, db: DbSession = Dep
     s = _session(db, slug)
     if _expired(s):
         raise HTTPException(410, "Link galeri ini sudah kedaluwarsa.")
-    key = _fail_key(slug, request)
-    if len(_recent_fails(key)) >= PIN_MAX_FAILS or len(_recent_fails(slug)) >= PIN_MAX_FAILS_GALLERY:
+    key, gkey = _fail_key(slug, request), _gallery_key(slug)
+    if ratelimit.count(db, key, PIN_WINDOW_S) >= PIN_MAX_FAILS or ratelimit.count(db, gkey, PIN_WINDOW_S) >= PIN_MAX_FAILS_GALLERY:
         raise HTTPException(429, "Terlalu banyak percobaan PIN. Tunggu 15 menit, atau tanyakan PIN yang benar ke fotografer Anda.")
     if not s.pin_hash or not hmac.compare_digest(hash_pin(body.pin.strip()), s.pin_hash):
-        now = time.monotonic()
-        _pin_fails[key].append(now)
-        _pin_fails[slug].append(now)
-        left = min(PIN_MAX_FAILS - len(_pin_fails[key]), PIN_MAX_FAILS_GALLERY - len(_pin_fails[slug]))
+        ratelimit.record(db, key, gkey)
+        left = min(PIN_MAX_FAILS - ratelimit.count(db, key, PIN_WINDOW_S), PIN_MAX_FAILS_GALLERY - ratelimit.count(db, gkey, PIN_WINDOW_S))
         raise HTTPException(401, f"PIN salah. Sisa {left} kali percobaan." if left > 0 else "PIN salah. Coba lagi dalam 15 menit.")
-    _pin_fails.pop(key, None)
+    ratelimit.clear(db, key)
     return UnlockOut(token=gallery_token(s))
 
 
@@ -249,7 +274,7 @@ def save_draft(slug: str, body: DraftRequest, db: DbSession = Depends(get_db), x
 
 
 @router.post("/gallery/{slug}/submit", response_model=SubmitOut)
-def submit(slug: str, body: SubmitRequest, db: DbSession = Depends(get_db), x_gallery_token: str | None = Header(None), authorization: str | None = Header(None)):
+def submit(slug: str, body: SubmitRequest, background: BackgroundTasks, db: DbSession = Depends(get_db), x_gallery_token: str | None = Header(None), authorization: str | None = Header(None)):
     if is_admin_token(authorization):
         raise HTTPException(403, "Mode pratinjau fotografer: pilihan tidak dikirim. Buka link di browser lain (atau mode Incognito) untuk mencoba sebagai klien.")
     s = _session(db, slug)
@@ -279,6 +304,7 @@ def submit(slug: str, body: SubmitRequest, db: DbSession = Depends(get_db), x_ga
     s.submitted_at = utcnow()
     s.draft_ids = s.draft_notes = s.draft_maybe = None
     db.commit()
+    background.add_task(backup.backup_after_submit, s.client_name)  # amankan hasil pilihan saat itu juga
 
     extra = max(0, len(ids) - s.photo_limit)
     msg = f"Terima kasih! {len(ids)} foto pilihan Anda sudah tersimpan."

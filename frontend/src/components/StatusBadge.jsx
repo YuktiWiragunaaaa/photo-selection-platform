@@ -1,3 +1,4 @@
+// [ID] Label status sesi: Belum dibuka / Memilih / Selesai.
 import clsx from 'clsx'
 
 /** Pill status: Belum dibuka (not opened yet) · Memilih (client is choosing) · Selesai (submitted). */
@@ -7,8 +8,8 @@ export function sessionState(s) {
 }
 
 const LOOK = {
-  done: ['Selesai', 'bg-ink text-paper'],
-  choosing: ['Memilih', 'bg-accent text-ink'],
+  done: ['Selesai', 'bg-solid text-onsolid'],
+  choosing: ['Memilih', 'bg-accent text-onaccent'],
   unopened: ['Belum dibuka', 'bg-wash text-mute'],
 }
 

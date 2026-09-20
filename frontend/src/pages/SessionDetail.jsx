@@ -1,6 +1,7 @@
+// [ID] Detail satu sesi (ADMIN): link & WhatsApp, info, tombol aksi, hasil pilihan, export XMP/CSV.
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Copy, Download, Eye, ExternalLink, FolderSync, KeyRound, MessageCircle, MessageSquare, Pencil, RotateCcw, Eraser, Lock, Trash2 } from 'lucide-react'
+import { Copy, Download, Eye, FolderDown, ExternalLink, FolderSync, KeyRound, MessageCircle, MessageSquare, Pencil, RotateCcw, Eraser, Lock, Trash2 } from 'lucide-react'
 import AccessEditor from '../components/AccessEditor'
 import AdminPhotoGrid from '../components/AdminPhotoGrid'
 import clsx from 'clsx'
@@ -13,6 +14,28 @@ import { errorMessage } from '../api/client'
 import { copyText } from '../hooks/useClipboard'
 import { recallPin } from '../utils/pin'
 
+// Chrome/Edge desktop can write straight into a chosen folder (no zip, no extracting)
+const canPickFolder = typeof window !== 'undefined' && 'showDirectoryPicker' in window
+async function saveXmpToFolder(id) {
+  let dir
+  try {
+    dir = await window.showDirectoryPicker({ id: 'raw-folder', mode: 'readwrite' })
+  } catch {
+    return 0 // cancelled
+  }
+  const files = await adminApi.xmpFiles(id)
+  for (const f of files) {
+    const handle = await dir.getFileHandle(f.name, { create: true })
+    const w = await handle.createWritable()
+    await w.write(f.content)
+    await w.close()
+  }
+  return files.length
+}
+import { fillWaTemplate, useStudio } from '../utils/theme'
+
+const DEFAULT_WA = 'Halo {nama}, fotonya sudah bisa dipilih ya.\n\n{link}\nPIN: {pin}\n\nPilih {paket} foto favorit kalian ya{tambahan}, lalu tekan Kirim.\n\nDitunggu sampai {deadline}.\n\nTerima kasih!'
+
 export default function SessionDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -23,6 +46,14 @@ export default function SessionDetail() {
   const [ready, setReady] = useState(false)
   const [syncKey, setSyncKey] = useState(0)
   const [syncing, setSyncing] = useState(false)
+  const [waTemplate, setWaTemplate] = useState('')
+  const studio = useStudio()
+  useEffect(() => {
+    adminApi
+      .getSettings()
+      .then((x) => setWaTemplate(x.theme.wa_template))
+      .catch(() => {})
+  }, [])
 
   const load = useCallback(() => adminApi.getSession(id).then(setS).catch((e) => setError(errorMessage(e))), [id])
   useEffect(() => {
@@ -44,52 +75,52 @@ export default function SessionDetail() {
   const done = s.status === 'completed'
   const pin = s.has_pin ? recallPin(s.id) : ''
   const fmt = (d) => new Date(d).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-  // ===== TEKS PESAN WHATSAPP — ubah kalimatnya di sini. Setiap baris = satu baris di WA, '' = baris kosong. =====
-  const waText = [
-    `Halo ${s.client_name}, fotonya sudah bisa dipilih ya.`,
-    '',
-    s.gallery_url,
-    s.has_pin ? `PIN: ${pin || '[isi PIN]'}` : null,
-    '',
-    `Pilih ${s.photo_limit} foto favorit kalian ya${s.max_limit && s.max_limit > s.photo_limit ? ` (kalau mau lebih, bisa sampai ${s.max_limit} dengan biaya tambahan)` : ''}, lalu tekan Kirim.`,
-    '',
-    s.expires_at ? `Ditunggu sampai ${new Date(s.expires_at).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}.` : null,
-    s.expires_at ? '' : null,
-    'Terima kasih!',
-  ]
-    .filter((x) => x !== null)
-    .join('\n')
+  // Teks pesan WhatsApp diatur dari admin: Pengaturan → Pesan WhatsApp (tanpa buka kode)
+  const waText = fillWaTemplate(waTemplate || DEFAULT_WA, {
+    nama: s.client_name,
+    link: s.gallery_url,
+    pin: s.has_pin ? pin || '[isi PIN]' : '',
+    paket: s.photo_limit,
+    tambahan: s.max_limit && s.max_limit > s.photo_limit ? ` (kalau mau lebih, bisa sampai ${s.max_limit} dengan biaya tambahan)` : '',
+    deadline: s.expires_at ? new Date(s.expires_at).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' }) : '',
+    studio: studio?.studio_name,
+  })
 
   return (
     <AdminShell
       eyebrow={<Link to="/admin" className="hover:text-ink">← Semua sesi</Link>}
-      title={<span className="font-display text-5xl font-normal italic tracking-normal sm:text-6xl">{s.client_name}</span>}
+      title={<span className="font-display text-4xl font-normal tracking-normal sm:text-6xl">{s.client_name}</span>}
       actions={<StatusBadge session={s} className="h-[34px] px-3.5 text-[13px]" />}
     >
       <Toast message={toast} onClose={() => setToast('')} />
 
-      <div className="grid gap-5 md:grid-cols-[1fr_1fr]">
+      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <section>
-          <div className="on-dark flex flex-col gap-3.5 rounded-[26px] bg-ink p-5 text-paper sm:p-6">
+          <div className="on-dark flex flex-col gap-3.5 rounded-[26px] bg-solid p-5 text-onsolid sm:p-6">
           <p className="eyebrow">Link galeri klien</p>
           <div className="flex items-center gap-2 rounded-2xl bg-ink2 p-1.5 pl-4">
             <span className="min-w-0 flex-1 truncate font-mono text-sm">{s.gallery_url}</span>
             <button type="button" className="btn h-10 rounded-xl bg-paper px-4 text-xs font-bold text-ink hover:bg-sand" onClick={() => act(async () => { if (!(await copyText(s.gallery_url))) throw new Error() }, 'Link disalin')}>
               <Copy size={13} /> Salin
             </button>
-            <a href={s.gallery_url} target="_blank" rel="noreferrer" className="btn-ghost h-10 w-10 px-0" aria-label="Buka galeri">
+            <a href={`${s.gallery_url}?preview=1`} target="_blank" rel="noreferrer" className="btn-ghost h-10 w-10 px-0" aria-label="Buka galeri">
               <ExternalLink size={13} />
             </a>
           </div>
 
           <a
-            href={`https://wa.me/?text=${encodeURIComponent(waText)}`}
+            href={`https://wa.me/${s.client_wa || ''}?text=${encodeURIComponent(waText)}`}
             target="_blank"
             rel="noreferrer"
             className="btn-accent h-[50px] w-full px-4 text-sm"
           >
             <MessageCircle size={16} /> Kirim lewat WhatsApp{s.has_pin && !pin && ' (isi PIN dulu)'}
           </a>
+          <p className="text-xs text-sand">
+            {s.client_wa
+              ? `Langsung terbuka ke chat +${s.client_wa}.`
+              : 'Nomor WA klien belum diisi, jadi kontaknya masih dipilih sendiri di WhatsApp. Isi lewat “Edit sesi”.'}
+          </p>
           {!ready && <p className="text-xs text-sand">Tunggu “Galeri siap dibagikan” sebelum mengirim link, supaya klien tidak menunggu foto dimuat.</p>}
           </div>
 
@@ -118,7 +149,7 @@ export default function SessionDetail() {
             </button>
           </div>
 
-          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3.5 rounded-[26px] bg-card p-5 text-sm sm:px-6 [&>dd]:min-w-0 [&>dt]:text-mute">
+          <dl className="mt-4 grid grid-cols-1 gap-x-4 gap-y-1 rounded-[26px] bg-card p-5 text-sm sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-y-3.5 sm:px-6 [&>dd]:mb-3 [&>dd]:min-w-0 [&>dd]:break-words sm:[&>dd]:mb-0 [&>dt]:text-xs [&>dt]:text-mute sm:[&>dt]:text-sm">
             <dt className="text-mute">Folder Drive</dt>
             <dd className="truncate">{s.drive_folder_id}</dd>
             <dt className="text-mute">Paket / maksimal</dt>
@@ -135,6 +166,12 @@ export default function SessionDetail() {
                 {s.expires_at ? `berlaku s/d ${new Date(s.expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'tanpa kedaluwarsa'}
               </span>
             </dd>
+            {s.client_wa && (
+              <>
+                <dt className="text-mute">WhatsApp klien</dt>
+                <dd className="font-mono">+{s.client_wa}</dd>
+              </>
+            )}
             <dt className="text-mute">Aktivitas klien</dt>
             <dd className="flex items-center gap-1">
               <Eye size={11} />
@@ -216,14 +253,29 @@ export default function SessionDetail() {
                 <span className="font-mono text-[56px] leading-none tracking-[-0.05em]">{s.selected_count}</span>
                 <span className="font-mono text-[22px] leading-none text-faint">/ {s.photo_limit}</span>
                 {s.extra_count > 0 && (
-                  <span className="self-center whitespace-nowrap rounded-full bg-ink px-2.5 py-1 text-xs font-bold text-accent">+{s.extra_count} di luar paket</span>
+                  <span className="self-center whitespace-nowrap rounded-full bg-solid px-2.5 py-1 text-xs font-bold text-accent">+{s.extra_count} di luar paket</span>
                 )}
               </div>
               {s.extra_count > 0 && (
                 <p className="mt-1 text-xs text-mute">Foto tambahan diberi label <b className="text-ink">kuning</b> di XMP dan ditandai <code>extra=yes</code> di CSV.</p>
               )}
               <div className="mt-4 flex flex-wrap gap-2">
-                <button type="button" className="btn-ink h-9 px-3 text-xs" onClick={() => act(() => adminApi.downloadXmp(s.id))}>
+                {canPickFolder && (
+                  <button
+                    type="button"
+                    className="btn-ink h-9 px-3 text-xs"
+                    title="Pilih folder RAW klien — file .xmp langsung disimpan di sana"
+                    onClick={() =>
+                      act(async () => {
+                        const n = await saveXmpToFolder(s.id)
+                        if (n) setToast(`${n} file XMP disimpan ke folder`)
+                      })
+                    }
+                  >
+                    <FolderDown size={13} /> Simpan XMP ke folder
+                  </button>
+                )}
+                <button type="button" className={clsx(canPickFolder ? 'btn-ghost' : 'btn-ink', 'h-9 px-3 text-xs')} onClick={() => act(() => adminApi.downloadXmp(s.id))}>
                   <Download size={13} /> XMP .zip
                 </button>
                 <button type="button" className="btn-ghost h-9 px-3 text-xs" onClick={() => act(async () => { const { filenames } = await adminApi.filenames(s.id); if (!(await copyText(filenames))) throw new Error() }, 'Nama file disalin')}>

@@ -1,19 +1,22 @@
+# [ID] API untuk ADMIN: login, sesi, edit/reset/kunci ulang, pengaturan, export XMP/CSV.
 import json
 import re
-import time
-from collections import defaultdict
 from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile, status
-from sqlalchemy.orm import Session as DbSession
+from sqlalchemy.orm import Session as DbSession, object_session
 
 from ..auth import create_access_token, require_admin, verify_admin_password
 from ..config import get_settings
 from ..database import get_db
-from ..models import PhotoSession
+from ..models import PhotoSession, SessionStatus, utcnow
 from ..schemas import (
+    AdminSettings,
+    AdminSettingsUpdate,
     Branding,
     BrandingUpdate,
+    PasswordChange,
+    ThemeUpdate,
     CacheStatus,
     FolderCheck,
     FolderCheckOut,
@@ -24,7 +27,7 @@ from ..schemas import (
     SessionUpdate,
     TokenResponse,
 )
-from ..services import branding, drive_service, xmp_service
+from ..services import branding, drive_service, ratelimit, xmp_service
 from .gallery import clear_pin_fails, hash_pin, image_token
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -50,8 +53,21 @@ def _draft_photos(s: PhotoSession) -> list[dict]:
     return [{"drive_file_id": i, "filename": names.get(i, i), "note": notes.get(i)} for i in json.loads(s.draft_ids or "[]")]
 
 
+def _base_url(s: PhotoSession) -> str:
+    """Public address set in the admin panel, else FRONTEND_URL from .env."""
+    db = object_session(s)
+    return (db and branding.public_url(db)) or get_settings().frontend_url.rstrip("/")
+
+
+def _is_new(s: PhotoSession) -> bool:
+    """Sudah dikirim klien tapi belum pernah dibuka admin sejak pengiriman itu."""
+    if s.status != SessionStatus.completed or not s.submitted_at:
+        return False
+    return s.reviewed_at is None or s.reviewed_at < s.submitted_at
+
+
 def _out(s: PhotoSession) -> dict:
-    cols = ("id", "slug", "client_name", "drive_folder_id", "photo_limit", "max_limit", "status", "notes", "expires_at", "created_at", "submitted_at", "first_opened_at", "last_seen_at")
+    cols = ("id", "slug", "client_name", "drive_folder_id", "photo_limit", "max_limit", "status", "notes", "expires_at", "created_at", "submitted_at", "first_opened_at", "last_seen_at", "client_wa")
     return {
         **{c: getattr(s, c) for c in cols},
         "has_pin": bool(s.pin_hash),
@@ -60,8 +76,9 @@ def _out(s: PhotoSession) -> dict:
         "draft_photos": _draft_photos(s),
         "selected_count": len(s.selected_photos),
         "extra_count": sum(1 for p in s.selected_photos if p.is_extra),
-        "gallery_url": f"{get_settings().frontend_url.rstrip('/')}/g/{s.slug}",
+        "gallery_url": f"{_base_url(s)}/g/{s.slug}",
         "selected_photos": s.selected_photos,
+        "is_new": _is_new(s),
         "gallery_token": image_token(s) if s.pin_hash else None,  # lets the admin page load thumbnails
     }
 
@@ -80,27 +97,22 @@ def _extract_folder_id(value: str) -> str:
 
 
 # Admin login brute-force guard: 5 wrong per address and 20 wrong in total per 15 minutes.
-_login_fails: dict[str, list[float]] = defaultdict(list)
+# Hitungannya disimpan di database, jadi tidak ikut hilang saat server dinyalakan ulang.
 LOGIN_WINDOW_S = 15 * 60
 
 
-def _recent(key: str) -> list[float]:
-    now = time.monotonic()
-    _login_fails[key] = [t for t in _login_fails[key] if now - t < LOGIN_WINDOW_S]
-    return _login_fails[key]
-
-
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, request: Request):
+def login(body: LoginRequest, request: Request, db: DbSession = Depends(get_db)):
     ip = request.client.host if request.client else "?"
-    if len(_recent(ip)) >= 5 or len(_recent("*")) >= 20:
+    if ratelimit.count(db, f"login:{ip}", LOGIN_WINDOW_S) >= 5 or ratelimit.count(db, "login:*", LOGIN_WINDOW_S) >= 20:
         raise HTTPException(429, "Terlalu banyak percobaan login. Coba lagi dalam 15 menit.")
-    if not verify_admin_password(body.password):
-        now = time.monotonic()
-        _login_fails[ip].append(now)
-        _login_fails["*"].append(now)
+    ok = branding.check_admin_password(db, body.password)  # password set from the panel wins over .env
+    if ok is None:
+        ok = verify_admin_password(body.password)
+    if not ok:
+        ratelimit.record(db, f"login:{ip}", "login:*")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Password salah")
-    _login_fails.pop(ip, None)
+    ratelimit.clear(db, f"login:{ip}")
     return TokenResponse(access_token=create_access_token())
 
 
@@ -128,6 +140,7 @@ def create_session(body: SessionCreate, background: BackgroundTasks, db: DbSessi
         notes=body.notes,
         pin_hash=hash_pin(body.pin) if body.pin else None,
         expires_at=body.expires_at,
+        client_wa=branding.normalize_wa(body.client_wa) or None,
     )
     db.add(s)
     db.commit()
@@ -150,7 +163,12 @@ def check_folder(body: FolderCheck):
 
 @router.get("/sessions/{session_id}", response_model=SessionDetailOut, dependencies=[Depends(require_admin)])
 def get_session(session_id: str, db: DbSession = Depends(get_db)):
-    return _out(_get_or_404(db, session_id))
+    s = _get_or_404(db, session_id)
+    out = _out(s)  # baca penanda "baru" dulu, sebelum ditandai sudah dilihat
+    if out["is_new"]:
+        s.reviewed_at = utcnow()
+        db.commit()
+    return out
 
 
 @router.patch("/sessions/{session_id}", response_model=SessionDetailOut, dependencies=[Depends(require_admin)])
@@ -182,6 +200,8 @@ def update_session(session_id: str, body: SessionUpdate, background: BackgroundT
             raise HTTPException(400, "PIN harus 4 digit angka.")
         else:
             s.pin_hash = hash_pin(body.pin)
+    if body.client_wa is not None:
+        s.client_wa = branding.normalize_wa(body.client_wa) or None
     if body.clear_expiry:
         s.expires_at = None
     elif body.expires_at is not None:
@@ -244,7 +264,7 @@ def relock_session(session_id: str, db: DbSession = Depends(get_db)):
     s.access_epoch = (s.access_epoch or 0) + 1
     db.commit()
     db.refresh(s)
-    clear_pin_fails(s.slug)
+    clear_pin_fails(db, s.slug)
     return _out(s)
 
 
@@ -281,6 +301,12 @@ def export_xmp(session_id: str, db: DbSession = Depends(get_db)):
     return Response(data, media_type="application/zip", headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
+@router.get("/sessions/{session_id}/export/xmp-files", dependencies=[Depends(require_admin)])
+def export_xmp_files(session_id: str, db: DbSession = Depends(get_db)):
+    s = _completed_or_400(db, session_id)
+    return {"files": xmp_service.xmp_files(s.client_name, s.selected_photos)}
+
+
 @router.get("/sessions/{session_id}/export/filenames", dependencies=[Depends(require_admin)])
 def export_filenames(session_id: str, db: DbSession = Depends(get_db)):
     s = _completed_or_400(db, session_id)
@@ -307,6 +333,49 @@ def put_branding(body: BrandingUpdate, db: DbSession = Depends(get_db)):
     return branding.get(db)
 
 
+# ---------------------------------------------------------------- customization (no code needed)
+def _admin_settings(db: DbSession) -> AdminSettings:
+    return AdminSettings(
+        theme=branding.get_theme(db),
+        public_url=branding.public_url(db),
+        fonts_display=branding.FONTS_DISPLAY,
+        fonts_body=branding.FONTS_BODY,
+        password_from_panel=branding.check_admin_password(db, "") is not None,
+    )
+
+
+@router.get("/settings", response_model=AdminSettings, dependencies=[Depends(require_admin)])
+def get_admin_settings(db: DbSession = Depends(get_db)):
+    return _admin_settings(db)
+
+
+@router.put("/settings/theme", response_model=AdminSettings, dependencies=[Depends(require_admin)])
+def put_theme(body: ThemeUpdate, db: DbSession = Depends(get_db)):
+    branding.set_theme(db, body.theme)
+    return _admin_settings(db)
+
+
+@router.put("/settings", response_model=AdminSettings, dependencies=[Depends(require_admin)])
+def put_admin_settings(body: AdminSettingsUpdate, db: DbSession = Depends(get_db)):
+    if body.public_url is not None:
+        try:
+            branding.set_public_url(db, body.public_url)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    return _admin_settings(db)
+
+
+@router.post("/settings/password", status_code=204, dependencies=[Depends(require_admin)])
+def change_password(body: PasswordChange, db: DbSession = Depends(get_db)):
+    ok = branding.check_admin_password(db, body.current)
+    if ok is None:
+        ok = verify_admin_password(body.current)
+    if not ok:
+        raise HTTPException(400, "Password lama salah.")
+    branding.set_admin_password(db, body.new)
+    return Response(status_code=204)
+
+
 @router.post("/branding/logo", response_model=Branding, dependencies=[Depends(require_admin)])
 async def upload_logo(file: UploadFile = File(...), db: DbSession = Depends(get_db)):
     if file.content_type not in branding.LOGO_TYPES:
@@ -315,6 +384,26 @@ async def upload_logo(file: UploadFile = File(...), db: DbSession = Depends(get_
     if len(content) > 2 * 1024 * 1024:
         raise HTTPException(400, "Logo maksimal 2 MB.")
     branding.save_logo(content, file.content_type)
+    return branding.get(db)
+
+
+@router.post("/branding/intro-video/{variant}", response_model=Branding, dependencies=[Depends(require_admin)])
+async def upload_intro_video(variant: str, file: UploadFile = File(...), db: DbSession = Depends(get_db)):
+    if variant not in branding.VIDEO_VARIANTS:
+        raise HTTPException(404)
+    if file.content_type not in branding.VIDEO_TYPES:
+        raise HTTPException(400, "Video harus MP4 atau WebM.")
+    content = await file.read(branding.VIDEO_MAX_BYTES + 1)
+    if len(content) > branding.VIDEO_MAX_BYTES:
+        raise HTTPException(400, "Video maksimal 6 MB. Perpendek durasinya atau kecilkan resolusinya ke 720p.")
+    branding.save_video(variant, content, file.content_type)
+    return branding.get(db)
+
+
+@router.delete("/branding/intro-video/{variant}", response_model=Branding, dependencies=[Depends(require_admin)])
+def delete_intro_video(variant: str, db: DbSession = Depends(get_db)):
+    if variant in branding.VIDEO_VARIANTS:
+        branding.remove_video(variant)
     return branding.get(db)
 
 

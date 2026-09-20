@@ -2,9 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme defaults (RGB triples). Overridden at runtime from the admin's "Tampilan" settings. */
+:root {
+  --c-paper: 244 241 234;
+  --c-card: 255 255 255;
+  --c-ink: 20 20 19;
+  --c-ink2: 37 37 34;
+  --c-mute: 85 82 75;
+  --c-faint: 138 135 127;
+  --c-sand: 207 203 193;
+  --c-line: 226 221 210;
+  --c-wash: 236 231 220;
+  --c-accent: 212 255 58;
+  --c-onaccent: 20 20 19;
+  --c-solid: 20 20 19; /* permukaan kuat: bar bawah, tombol utama, label */
+  --c-onsolid: 244 241 234;
+  --c-danger: 179 38 30;
+  --f-display: 'Instrument Serif';
+  --f-body: 'Bricolage Grotesque';
+  --display-style: italic;
+}
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+  }
+  /* no sideways wobble on phones when something is a pixel too wide */
+  html,
+  body {
+    overflow-x: clip;
   }
   body {
     @apply bg-paper text-ink font-sans antialiased;
@@ -15,7 +41,7 @@
     -webkit-user-drag: none;
   }
   :focus-visible {
-    outline: 2px solid #141413;
+    outline: 2px solid rgb(var(--c-ink));
     outline-offset: 3px;
   }
   @media (prefers-reduced-motion: reduce) {
@@ -34,10 +60,10 @@
     @apply inline-flex items-center justify-center gap-2 h-11 px-5 rounded-full text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-ink {
-    @apply btn bg-ink text-paper hover:bg-ink2;
+    @apply btn bg-solid text-onsolid hover:bg-ink2;
   }
   .btn-accent {
-    @apply btn bg-accent font-bold text-ink hover:brightness-95;
+    @apply btn bg-accent font-bold text-onaccent hover:brightness-95;
   }
   .btn-ghost {
     @apply btn border-[1.5px] border-line text-ink hover:border-ink;
@@ -51,9 +77,23 @@
 }
 
 /* Dark surfaces (lightbox): ghost buttons and labels flip to light-on-dark */
-.on-dark .btn-ghost { border-color: #4A4944; color: #F4F1EA; }
-.on-dark .btn-ghost:hover { border-color: #F4F1EA; }
-.on-dark .eyebrow, .on-dark .label { color: #CFCBC1; }
+.on-dark .btn-ghost { border-color: rgb(var(--c-sand) / 0.35); color: rgb(var(--c-onsolid)); }
+.on-dark .btn-ghost:hover { border-color: rgb(var(--c-onsolid)); }
+.on-dark .eyebrow, .on-dark .label { color: rgb(var(--c-sand)); }
+
+/* Areas that are designed dark-on-purpose (intro, photo viewer) keep the light-mode roles,
+   so in dark mode they don't flip into light panels. */
+.keep-light {
+  --c-paper: var(--l-paper); --c-card: var(--l-card); --c-ink: var(--l-ink); --c-ink2: var(--l-ink2);
+  --c-mute: var(--l-mute); --c-faint: var(--l-faint); --c-sand: var(--l-sand); --c-line: var(--l-line);
+  --c-wash: var(--l-wash); --c-solid: var(--l-solid); --c-onsolid: var(--l-onsolid); --c-danger: var(--l-danger);
+}
+:root:not([style*="--l-paper"]) .keep-light { /* before the theme loads: fall back to defaults */
+  --c-paper: 244 241 234; --c-ink: 20 20 19; --c-ink2: 37 37 34; --c-solid: 20 20 19; --c-onsolid: 244 241 234; --c-sand: 207 203 193; --c-faint: 138 135 127;
+}
+
+/* Display headings follow the "italic" switch in Tampilan */
+.font-display { font-style: var(--display-style); }
 
 /* Opening title card (Intro.jsx) */
 @keyframes intro-letter {
@@ -70,6 +110,11 @@
 .intro-line { transform-origin: left; transform: scaleX(0); animation: intro-line 0.9s 0.8s cubic-bezier(.6,0,.2,1) forwards; }
 .intro-logo { animation: intro-logo 0.6s ease both; }
 .intro-out { animation: intro-out 0.7s cubic-bezier(.7,0,.2,1) forwards; }
+@keyframes intro-morph-in { from { opacity: 0; transform: scale(1.12); filter: blur(8px); } to { opacity: 1; transform: none; filter: none; } }
+.intro-morph-logo { animation: intro-morph-in 0.9s cubic-bezier(.2,.7,.2,1) both; will-change: transform; }
+.intro-morph-text { opacity: 0; animation: intro-sub 0.6s 0.7s ease forwards; }
+@keyframes intro-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.intro-fade { animation: intro-fade-in 1s ease both; }
 
 /* Masonry: columns are built in JS (useColumns) so reading order stays left-to-right. */
 .masonry {

@@ -1,3 +1,4 @@
+// [ID] Dashboard ADMIN: ringkasan status, pencarian, dan kartu tiap sesi.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Copy, Download, Plus, RefreshCw, Search } from 'lucide-react'
@@ -76,6 +77,7 @@ export default function Dashboard() {
       choosing: all.filter((s) => sessionState(s) === 'choosing').length,
       unopened: all.filter((s) => sessionState(s) === 'unopened').length,
       done: all.filter((s) => s.status === 'completed').length,
+      fresh: all.filter((s) => s.is_new).length,
       urgent: all.filter(isUrgent).length,
     }
   }, [sessions])
@@ -85,6 +87,7 @@ export default function Dashboard() {
     return (sessions || []).filter((s) => {
       if (term && !s.client_name.toLowerCase().includes(term)) return false
       if (filter === 'urgent') return isUrgent(s)
+      if (filter === 'fresh') return !!s.is_new
       if (filter !== 'all') return sessionState(s) === filter
       return true
     })
@@ -93,6 +96,7 @@ export default function Dashboard() {
   const branding = useBranding()
   const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })
   const tiles = [
+    ['fresh', 'Baru selesai', stats.fresh, 'fresh'],
     ['choosing', 'Klien sedang memilih', stats.choosing, 'dark'],
     ['unopened', 'Belum dibuka', stats.unopened],
     ['done', 'Selesai dipilih', stats.done],
@@ -107,7 +111,7 @@ export default function Dashboard() {
         <div className="flex w-full gap-2 sm:w-auto">
           <label className="flex h-[46px] min-w-0 flex-1 items-center gap-2 rounded-full border-[1.5px] border-line bg-card px-4 text-mute sm:w-72 sm:flex-none">
             <Search size={16} />
-            <input
+            <input autoComplete="off"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Cari nama klien…"
@@ -123,7 +127,7 @@ export default function Dashboard() {
     >
       <Toast message={toast} onClose={() => setToast('')} />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {tiles.map(([key, label, n, tone]) => (
           <button
             key={key}
@@ -132,12 +136,12 @@ export default function Dashboard() {
             aria-pressed={filter === key}
             className={clsx(
               'flex flex-col items-start gap-1.5 rounded-[22px] px-5 py-4 text-left transition-shadow',
-              tone === 'dark' ? 'bg-ink text-paper' : 'bg-card',
+              tone === 'dark' ? 'bg-solid text-onsolid' : 'bg-card',
               filter === key && 'ring-2 ring-ink ring-offset-2 ring-offset-paper',
             )}
           >
             <span className={clsx('text-[13px]', tone === 'dark' ? 'text-sand' : 'text-mute')}>{label}</span>
-            <span className={clsx('font-mono text-[38px] leading-none tracking-[-0.04em]', tone === 'dark' && 'text-accent', tone === 'warn' && n > 0 && 'text-danger')}>
+            <span className={clsx('font-mono text-[38px] leading-none tracking-[-0.04em]', tone === 'dark' && 'text-accent', tone === 'warn' && n > 0 && 'text-danger', tone === 'fresh' && n > 0 && 'text-danger')}>
               {sessions ? n : '–'}
             </span>
           </button>
@@ -149,7 +153,7 @@ export default function Dashboard() {
           <p className="eyebrow animate-pulse">Memuat</p>
         ) : sessions.length === 0 ? (
           <div className="rounded-[26px] border-[1.5px] border-dashed border-line px-6 py-16 text-center">
-            <p className="font-display text-4xl italic">Belum ada sesi</p>
+            <p className="font-display text-4xl ">Belum ada sesi</p>
             <p className="mt-2 text-sm text-mute">Buat sesi pertama: tempel link folder Drive, tentukan jumlah foto, bagikan link ke klien.</p>
             <Link to="/admin/new" className="btn-accent mt-6">
               <Plus size={16} /> Buat sesi
@@ -177,10 +181,15 @@ export default function Dashboard() {
                   )}
                 </Link>
                 <div className="flex items-center justify-between gap-2 px-1.5">
-                  <Link to={`/admin/sessions/${s.id}`} className="min-w-0 truncate font-display text-[26px] italic leading-none hover:underline">
+                  <Link to={`/admin/sessions/${s.id}`} className="min-w-0 truncate font-display text-[26px] leading-none hover:underline">
                     {s.client_name}
                   </Link>
-                  <StatusBadge session={s} />
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {s.is_new && (
+                      <span className="rounded-full bg-danger px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-onsolid">Baru</span>
+                    )}
+                    <StatusBadge session={s} />
+                  </span>
                 </div>
                 <div className="flex items-center justify-between gap-2 px-1.5 text-xs text-mute">
                   <span className="font-mono">{countLine(s)}</span>

@@ -52,7 +52,7 @@ export default function CacheStatus({ sessionId, onReady, refreshKey = 0 }) {
         </span>
       </div>
       <div className="mt-2 h-[3px] w-full overflow-hidden rounded bg-line">
-        <div className="h-full bg-ink transition-[width] duration-500" style={{ width: `${pctThumb}%` }} />
+        <div className="h-full bg-solid transition-[width] duration-500" style={{ width: `${pctThumb}%` }} />
       </div>
       <p className="mt-1.5 text-[11px] text-mute">
         thumbnail {pctThumb}% · foto besar {pctFull}%

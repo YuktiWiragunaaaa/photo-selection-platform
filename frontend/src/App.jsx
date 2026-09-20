@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { loadBranding } from './utils/theme'
 import ProtectedRoute from './components/ProtectedRoute'
 import Dashboard from './pages/Dashboard'
 import Gallery from './pages/Gallery'
@@ -9,6 +11,10 @@ import SessionDetail from './pages/SessionDetail'
 import Settings from './pages/Settings'
 
 export default function App() {
+  // Apply the studio's colours & fonts (set in Pengaturan → Tampilan) as early as possible
+  useEffect(() => {
+    loadBranding()
+  }, [])
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/admin" replace />} />
@@ -19,6 +25,7 @@ export default function App() {
         <Route path="/admin/new" element={<NewSession />} />
         <Route path="/admin/sessions/:id" element={<SessionDetail />} />
         <Route path="/admin/settings" element={<Settings />} />
+        <Route path="/admin/settings/:tab" element={<Settings />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

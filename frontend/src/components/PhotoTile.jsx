@@ -1,3 +1,4 @@
+// [ID] Satu kotak foto di grid galeri klien (centang, tandai, label Tambahan).
 import { memo, useState } from 'react'
 import { Bookmark, Check, Maximize2, MessageSquare } from 'lucide-react'
 import clsx from 'clsx'
@@ -29,9 +30,9 @@ function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, re
           decoding="async"
           onLoad={() => setLoaded(true)}
           className={clsx(
-            'h-full w-full object-cover transition-[opacity,transform] duration-500',
+            'h-full w-full object-cover transition-opacity duration-500',
             loaded ? 'opacity-100' : 'opacity-0',
-            selected ? 'scale-[0.94]' : 'scale-100',
+
           )}
         />
         {/* Selection frame: the photo itself steps back inside a thin ink border */}
@@ -44,7 +45,7 @@ function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, re
         <span
           className={clsx(
             'pointer-events-none absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full transition-all duration-300',
-            selected ? 'scale-100 bg-accent text-ink' : 'scale-0 bg-paper text-ink',
+            selected ? 'scale-100 bg-accent text-onaccent' : 'scale-0 bg-paper text-ink',
           )}
         >
           <Check size={14} strokeWidth={3} />
@@ -60,7 +61,7 @@ function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, re
         </span>
       </figcaption>
       {extra && (
-        <span className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-ink px-2 py-0.5 text-[11px] font-bold text-accent">Tambahan</span>
+        <span className="pointer-events-none absolute bottom-2 left-2 rounded-full bg-solid px-2 py-0.5 text-[11px] font-bold text-accent">Tambahan</span>
       )}
       {hasNote && (
         <span className="pointer-events-none absolute left-9 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-paper/90 text-ink backdrop-blur" title="Ada catatan">
@@ -77,7 +78,7 @@ function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, re
           title={maybe ? 'Hapus tanda' : 'Tandai dulu (masih ragu)'}
           className={clsx(
             'absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full backdrop-blur transition-opacity',
-            maybe ? 'bg-ink text-paper opacity-100' : 'bg-paper/85 text-ink opacity-0 hover:bg-paper focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100',
+            maybe ? 'bg-solid text-onsolid opacity-100' : 'bg-paper/85 text-ink opacity-0 hover:bg-paper focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100',
           )}
         >
           <Bookmark size={14} fill={maybe ? 'currentColor' : 'none'} />

@@ -1,3 +1,4 @@
+// [ID] Form "Edit sesi" (ADMIN): nama, nomor WA klien, folder Drive, kuota, PIN, masa berlaku.
 import { useState } from 'react'
 import { Pencil, Shuffle } from 'lucide-react'
 import { adminApi } from '../api/adminApi'
@@ -17,6 +18,7 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
   const start = () => {
     setF({
       client_name: s.client_name,
+      client_wa: s.client_wa || '',
       drive_folder_id: s.drive_folder_id,
       notes: s.notes || '',
       photo_limit: s.photo_limit,
@@ -49,6 +51,7 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
     try {
       const body = {
         client_name: f.client_name,
+        client_wa: f.client_wa,
         notes: f.notes,
         photo_limit: Number(f.photo_limit),
         max_limit: f.max_limit ? Number(f.max_limit) : Number(f.photo_limit),
@@ -87,11 +90,16 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
           <label className="label" htmlFor="e-name">Nama klien</label>
-          <input id="e-name" className="field" value={f.client_name} onChange={set('client_name')} />
+          <input autoComplete="off" id="e-name" className="field" value={f.client_name} onChange={set('client_name')} />
+        </div>
+        <div className="col-span-2">
+          <label className="label" htmlFor="e-wa">Nomor WhatsApp klien (opsional)</label>
+          <input autoComplete="off" id="e-wa" inputMode="tel" className="field font-mono text-sm" value={f.client_wa} onChange={set('client_wa')} placeholder="0812-3456-7890" maxLength={25} />
+          <p className="mt-1 text-[11px] text-mute">Kalau diisi, tombol “Kirim lewat WhatsApp” langsung membuka chat klien ini. Kosongkan untuk memilih kontak sendiri.</p>
         </div>
         <div className="col-span-2">
           <label className="label" htmlFor="e-folder">Folder Google Drive</label>
-          <input
+          <input autoComplete="off"
             id="e-folder"
             className="field font-mono text-sm"
             value={f.drive_folder_id}
@@ -108,11 +116,11 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
         </div>
         <div>
           <label className="label" htmlFor="e-limit">Foto dalam paket</label>
-          <input id="e-limit" type="number" min={1} max={1000} className="field font-mono" value={f.photo_limit} onChange={set('photo_limit')} />
+          <input autoComplete="off" id="e-limit" type="number" min={1} max={1000} className="field font-mono" value={f.photo_limit} onChange={set('photo_limit')} />
         </div>
         <div>
           <label className="label" htmlFor="e-max">Maksimal dengan tambahan</label>
-          <input id="e-max" type="number" min={f.photo_limit || 1} max={2000} className="field font-mono" value={f.max_limit} onChange={set('max_limit')} placeholder="—" />
+          <input autoComplete="off" id="e-max" type="number" min={f.photo_limit || 1} max={2000} className="field font-mono" value={f.max_limit} onChange={set('max_limit')} placeholder="—" />
         </div>
         <div>
           <span className="label">PIN</span>
@@ -126,7 +134,7 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
                 key={v}
                 type="button"
                 onClick={() => setF({ ...f, pinMode: v, pin: v === 'set' && !f.pin ? randomPin() : f.pin })}
-                className={`rounded-full border px-3 py-1.5 ${f.pinMode === v ? 'border-ink bg-ink text-paper' : 'border-line text-mute hover:border-ink'}`}
+                className={`rounded-full border px-3 py-1.5 ${f.pinMode === v ? 'border-ink bg-solid text-onsolid' : 'border-line text-mute hover:border-ink'}`}
               >
                 {label}
               </button>
@@ -134,7 +142,7 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
           </div>
           {f.pinMode === 'set' && (
             <div className="mt-2 flex items-end gap-2">
-              <input
+              <input autoComplete="off"
                 inputMode="numeric"
                 maxLength={4}
                 className="field font-mono tracking-[0.3em]"
@@ -150,12 +158,12 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
         </div>
         <div>
           <label className="label" htmlFor="e-exp">Berlaku sampai</label>
-          <input id="e-exp" type="date" className="field font-mono text-sm" value={f.expires_at} onChange={set('expires_at')} />
+          <input autoComplete="off" id="e-exp" type="date" className="field font-mono text-sm" value={f.expires_at} onChange={set('expires_at')} />
           <p className="mt-1 text-[11px] text-mute">Kosongkan untuk tanpa batas.</p>
         </div>
         <div className="col-span-2">
           <label className="label" htmlFor="e-notes">Catatan</label>
-          <input id="e-notes" className="field" value={f.notes} onChange={set('notes')} placeholder="Prewedding, batch 1" />
+          <input autoComplete="off" id="e-notes" className="field" value={f.notes} onChange={set('notes')} placeholder="Prewedding, batch 1" />
         </div>
       </div>
       <div className="mt-4 flex justify-end gap-2">

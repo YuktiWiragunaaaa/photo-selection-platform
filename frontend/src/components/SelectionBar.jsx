@@ -1,3 +1,4 @@
+// [ID] Bar bawah galeri klien: jumlah terpilih, status simpan, filter, tombol Kirim.
 import { ArrowRight } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -6,7 +7,7 @@ import clsx from 'clsx'
  * picks, view filters and the one action. On phones the filters get their own
  * row so nothing collides with the counter or the submit button.
  */
-export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, selected, photoById, onSubmit, submitting, filter, onFilter }) {
+export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, saveState = '', selected, photoById, onSubmit, submitting, filter, onFilter }) {
   const hard = maxLimit || limit
   const extras = Math.max(0, count - limit)
   const pct = Math.min(100, (count / limit) * 100)
@@ -25,19 +26,19 @@ export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, s
 
   const filters = [
     ['all', 'Semua'],
-    ...(count > 0 ? [['selected', `Pilihan ${count}`]] : []),
+    ['selected', `Pilihan ${count}`], // selalu tampil (tidak muncul tiba-tiba) supaya tinggi bar tidak berubah
     ...(maybeCount > 0 ? [['maybe', `Ditandai ${maybeCount}`]] : []),
   ]
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-      <div className="pointer-events-auto w-full max-w-2xl animate-rise rounded-[26px] bg-ink text-paper shadow-[0_18px_40px_-16px_rgba(20,20,19,0.55)]">
+      <div className="pointer-events-auto w-full max-w-2xl animate-rise rounded-[26px] bg-solid text-onsolid shadow-[0_18px_40px_-16px_rgba(20,20,19,0.55)]">
         <div className="relative mx-4 mt-3 h-1.5 overflow-hidden rounded-full bg-ink2">
           <div className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out" style={{ width: `${pct}%` }} />
           {/* Extras fill the bar again, dotted, so "over the package" is visible at a glance */}
           {extras > 0 && (
             <div
-              className="absolute inset-y-0 left-0 bg-[repeating-linear-gradient(90deg,#F4F1EA_0_3px,transparent_3px_6px)] transition-[width] duration-500"
+              className="absolute inset-y-0 left-0 bg-[repeating-linear-gradient(90deg,rgb(var(--c-paper))_0_3px,transparent_3px_6px)] transition-[width] duration-500"
               style={{ width: `${Math.min(100, (extras / Math.max(1, hard - limit)) * 100)}%` }}
             />
           )}
@@ -50,7 +51,15 @@ export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, s
               <span className="text-faint"> / {String(limit).padStart(2, '0')}</span>
               {extras > 0 && <span className="ml-1 text-base text-accent">+{extras}</span>}
             </span>
-            <span className={clsx('mt-1 truncate text-[11px]', full || extras ? 'text-accent' : 'text-sand')}>{status}</span>
+            {/* Tinggi baris tetap: status simpan ditampilkan di sini agar galeri tidak melompat */}
+            <span className="mt-1 flex h-4 items-center gap-1.5 truncate text-[11px]" aria-live="polite">
+              <span className={clsx(full || extras ? 'text-accent' : 'text-sand')}>{status}</span>
+              {saveState && (
+                <span className={clsx('transition-opacity', saveState === 'offline' ? 'text-danger' : 'text-faint')}>
+                  · {saveState === 'saving' ? 'menyimpan…' : saveState === 'saved' ? 'tersimpan ✓' : 'offline'}
+                </span>
+              )}
+            </span>
           </div>
 
           <div className="hidden min-w-0 flex-1 items-center gap-1 overflow-hidden md:flex" aria-hidden>
@@ -75,7 +84,7 @@ export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, s
             {!submitting && <ArrowRight size={16} />}
           </button>
 
-          {filters.length > 1 && (
+          {true && (
             <div
               role="group"
               aria-label="Tampilkan"
@@ -86,10 +95,11 @@ export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, s
                   key={v}
                   type="button"
                   onClick={() => onFilter(v)}
+                  disabled={v === 'selected' && count === 0}
                   aria-pressed={filter === v}
                   className={clsx(
                     'flex-1 whitespace-nowrap rounded-full px-3 py-1.5 transition-colors sm:flex-none',
-                    filter === v ? 'bg-paper font-bold text-ink' : 'text-sand hover:text-paper',
+                    filter === v ? 'bg-paper font-bold text-ink' : 'text-sand hover:text-onsolid disabled:opacity-40',
                   )}
                 >
                   {label}

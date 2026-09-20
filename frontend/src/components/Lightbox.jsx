@@ -1,22 +1,39 @@
+// [ID] Tampilan foto besar untuk klien: geser kiri/kanan, pilih, tandai, catatan.
 import { useEffect, useRef, useState } from 'react'
 import { Bookmark, Check, ChevronLeft, ChevronRight, MessageSquare, X } from 'lucide-react'
 import clsx from 'clsx'
+import { lockScroll } from './Sheet'
 
 export default function Lightbox({ photos, index, selectedIds, extraIds, maybeIds, onMaybe, notes = {}, onNote, onClose, onNavigate, onToggle, disabled, readOnly }) {
   const photo = photos[index]
   const selected = selectedIds.has(photo.file_id)
   const note = notes[photo.file_id] || ''
-  const [loaded, setLoaded] = useState(false)
+  const [loadedSrc, setLoadedSrc] = useState(() => new Set()) // full-size images already decoded
+  const loaded = loadedSrc.has(photo.full_url)
+  const [dragX, setDragX] = useState(0) // finger offset while swiping
+  const [dragging, setDragging] = useState(false)
   const [noteOpen, setNoteOpen] = useState(false)
   const [draft, setDraft] = useState(note)
   const touch = useRef(null)
   const typing = useRef(false)
 
+  // Preload neighbours so the next swipe shows a sharp photo immediately
   useEffect(() => {
-    setLoaded(false)
+    ;[photos[index + 1], photos[index - 1]].forEach((p) => {
+      if (!p || loadedSrc.has(p.full_url)) return
+      const img = new Image()
+      img.onload = () => setLoadedSrc((s) => new Set(s).add(p.full_url))
+      img.src = p.full_url
+    })
+  }, [index]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     setNoteOpen(false)
     setDraft(notes[photo.file_id] || '')
   }, [index]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Kunci scroll halaman selama tampilan foto besar terbuka (sekali saja, tidak diulang tiap pilih)
+  useEffect(() => lockScroll(), [])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -33,19 +50,46 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
       }
     }
     window.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
     return () => {
       window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
     }
   }, [onClose, onNavigate, onToggle, photo.file_id, readOnly])
 
-  const onTouchStart = (e) => (touch.current = e.touches[0].clientX)
+  // Swipe: the photo follows the finger; release past the threshold to change photo.
+  // Only horizontal drags that start on the photo area count (not buttons / the note box),
+  // and pinch-zoom (2 fingers) is left to the browser.
+  const onTouchStart = (e) => {
+    if (typing.current || e.touches.length > 1 || e.target.closest('button, textarea, input, a')) {
+      touch.current = null
+      return
+    }
+    touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, axis: null }
+  }
+  const onTouchMove = (e) => {
+    const t = touch.current
+    if (!t || e.touches.length > 1) return
+    const dx = e.touches[0].clientX - t.x
+    const dy = e.touches[0].clientY - t.y
+    if (!t.axis && Math.abs(dx) + Math.abs(dy) > 8) t.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
+    if (t.axis !== 'x') return
+    setDragging(true)
+    // resist at the ends of the list
+    const atEdge = (dx > 0 && index === 0) || (dx < 0 && index === photos.length - 1)
+    setDragX(atEdge ? dx * 0.3 : dx)
+  }
   const onTouchEnd = (e) => {
-    if (touch.current == null || typing.current) return
-    const dx = e.changedTouches[0].clientX - touch.current
-    if (Math.abs(dx) > 50) onNavigate(dx < 0 ? 1 : -1)
+    const t = touch.current
     touch.current = null
+    if (!t || t.axis !== 'x') return
+    const dx = e.changedTouches[0].clientX - t.x
+    setDragging(false)
+    const canGo = dx < 0 ? index < photos.length - 1 : index > 0
+    if (Math.abs(dx) > Math.min(90, window.innerWidth * 0.2) && canGo) {
+      setDragX(0)
+      onNavigate(dx < 0 ? 1 : -1)
+    } else {
+      setDragX(0) // snap back
+    }
   }
 
   const canSelect = !readOnly && (!disabled || selected)
@@ -61,9 +105,8 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
       role="dialog"
       aria-modal="true"
       aria-label={photo.name}
-      className="on-dark fixed inset-0 z-50 flex flex-col bg-ink text-paper animate-fade"
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
+      className="on-dark keep-light fixed inset-0 z-50 flex flex-col bg-solid text-onsolid animate-fade"
+      style={{ overscrollBehavior: 'contain' }}
     >
       <header className="flex h-14 shrink-0 items-center justify-between px-4">
         <span className="font-mono text-xs text-sand">
@@ -76,28 +119,46 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
         </button>
       </header>
 
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 sm:px-16">
+      <div
+        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 sm:px-16"
+        style={{ touchAction: 'pinch-zoom' }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={() => {
+          touch.current = null
+          setDragging(false)
+          setDragX(0)
+        }}
+      >
         <button
           type="button"
           onClick={() => onNavigate(-1)}
           aria-label="Sebelumnya"
-          className="absolute left-2 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-ink2 text-paper hover:bg-mute sm:flex"
+          className="absolute left-2 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-ink2 text-onsolid hover:bg-mute sm:flex"
         >
           <ChevronLeft size={18} />
         </button>
-        <img
-          key={photo.file_id}
-          src={photo.full_url}
-          alt={photo.name}
-          onLoad={() => setLoaded(true)}
-          className={clsx('max-h-full max-w-full object-contain transition-opacity duration-300', loaded ? 'opacity-100' : 'opacity-0')}
-        />
-        {!loaded && <img src={photo.thumb_url} alt="" aria-hidden className="absolute max-h-full max-w-full object-contain blur-sm" />}
+        <div
+          className="relative flex h-full w-full items-center justify-center"
+          style={{ transform: `translate3d(${dragX}px,0,0)`, transition: dragging ? 'none' : 'transform 220ms cubic-bezier(.2,.7,.2,1)' }}
+        >
+          {/* sharp thumbnail first (same key → no flash), full image fades in over it once decoded */}
+          <img key={`t-${photo.file_id}`} src={photo.thumb_url} alt="" aria-hidden draggable={false} className="absolute inset-0 h-full w-full select-none object-contain" />
+          <img
+            key={photo.file_id}
+            src={photo.full_url}
+            alt={photo.name}
+            draggable={false}
+            onLoad={() => setLoadedSrc((s) => new Set(s).add(photo.full_url))}
+            className={clsx('relative h-full w-full select-none object-contain transition-opacity duration-200', loaded ? 'opacity-100' : 'opacity-0')}
+          />
+        </div>
         <button
           type="button"
           onClick={() => onNavigate(1)}
           aria-label="Berikutnya"
-          className="absolute right-2 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-ink2 text-paper hover:bg-mute sm:flex"
+          className="absolute right-2 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-ink2 text-onsolid hover:bg-mute sm:flex"
         >
           <ChevronRight size={18} />
         </button>
@@ -119,7 +180,7 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
               onFocus={() => (typing.current = true)}
               onBlur={() => (typing.current = false)}
               placeholder="Contoh: tolong crop lebih ketat, hapus orang di belakang"
-              className="w-full resize-none rounded-2xl border-0 bg-ink2 p-3 text-sm text-paper placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent"
+              className="w-full resize-none rounded-2xl border-0 bg-ink2 p-3 text-sm text-onsolid placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent"
             />
             <div className="mt-2 flex justify-end gap-2">
               <button type="button" className="btn-ghost h-9 px-3 text-xs" onClick={() => setNoteOpen(false)}>

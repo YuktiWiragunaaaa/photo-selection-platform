@@ -1,3 +1,4 @@
+// [ID] Halaman galeri KLIEN (/g/:slug): cek PIN, intro, grid foto, pilih/tandai foto, bar bawah, konfirmasi kirim.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { CalendarClock, Check, CircleHelp, MessageSquare } from 'lucide-react'
@@ -12,7 +13,10 @@ import SelectionBar from '../components/SelectionBar'
 import Toast from '../components/Toast'
 import PinGate from '../components/PinGate'
 import Guide from '../components/Guide'
+import SuccessPop from '../components/SuccessPop'
+import Sheet from '../components/Sheet'
 import Intro from '../components/Intro'
+import { applyTheme } from '../utils/theme'
 import { BrandFooter, BrandHeader } from '../components/Brand'
 
 export default function Gallery() {
@@ -29,7 +33,10 @@ export default function Gallery() {
   useEffect(() => {
     galleryApi
       .meta(slug)
-      .then(setMeta)
+      .then((m) => {
+        applyTheme(m.branding?.theme) // studio colours & fonts before anything renders
+        setMeta(m)
+      })
       .catch((e) => setError(errorMessage(e, 'Galeri tidak bisa dimuat.')))
   }, [slug])
 
@@ -81,14 +88,34 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
   const [saveState, setSaveState] = useState('') // '' | 'saving' | 'saved' | 'offline'
   // How-to: pops up the first time this gallery is opened on this device; reopen anytime via "Cara memilih" (top right).
   const guideKey = `psp_guide_${slug}`
-  const [guide, setGuide] = useState(() => {
-    if (readOnly) return false
-    try {
-      return !localStorage.getItem(guideKey)
-    } catch {
-      return true
+  const theme = data.branding?.theme || {}
+  const simple = !!theme.simple_mode // "Mode sederhana": fewer options, bigger labelled buttons
+
+  // Bigger text for clients (Pengaturan → Tampilan → Ukuran teks); every rem-based size scales with it
+  useEffect(() => {
+    const html = document.documentElement
+    const prev = html.style.fontSize
+    html.style.fontSize = `${16 * (theme.text_scale || 1)}px`
+    return () => {
+      html.style.fontSize = prev
     }
-  })
+  }, [theme.text_scale])
+
+  // Panduan tidak muncul bersamaan dengan intro: tunggu intro selesai dulu, baru tampil
+  const [guide, setGuide] = useState(false)
+  useEffect(() => {
+    if (readOnly || theme.guide_enabled === false) return
+    try {
+      if (localStorage.getItem(guideKey)) return
+    } catch {}
+    const show = () => setTimeout(() => setGuide(true), 350)
+    if (window.__pspIntroActive) {
+      window.addEventListener('psp:intro-done', show, { once: true })
+      return () => window.removeEventListener('psp:intro-done', show)
+    }
+    const t = show()
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const closeGuide = useCallback(() => {
     setGuide(false)
     try {
@@ -187,6 +214,9 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
   const navigate = useCallback((d) => setLightbox((i) => (i + d + visible.length) % visible.length), [visible.length, setLightbox])
   const close = useCallback(() => setLightbox(null), [setLightbox])
 
+  const [celebrate, setCelebrate] = useState(0) // jumlah foto terkirim untuk pop-up sukses (0 = tidak tampil)
+  const hideCelebrate = useCallback(() => setCelebrate(0), [])
+
   const submit = async () => {
     setSubmitting(true)
     try {
@@ -194,6 +224,7 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
       setData((d) => ({ ...d, status: 'completed', selected_ids: sel.ids, notes: sel.notes }))
       setDone(res)
       setConfirming(false)
+      setCelebrate(sel.count || sel.ids.length) // tampilkan animasi sukses
       sel.clear()
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) {
@@ -224,7 +255,7 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
   return (
     <main className="min-h-screen pb-44 sm:pb-32">
       {data.preview && (
-        <div className="sticky top-0 z-30 bg-ink px-4 py-2.5 text-center text-xs text-paper">
+        <div className="sticky top-0 z-30 bg-solid px-4 py-2.5 text-center text-xs text-onsolid">
           <b className="text-accent">Mode pratinjau fotografer</b> — yang kamu klik di sini tidak disimpan dan tidak mengubah pilihan klien.
         </div>
       )}
@@ -236,13 +267,13 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
             <BrandHeader branding={b} />
           </div>
           {!readOnly && (
-            <button type="button" onClick={() => setGuide(true)} className="btn-ghost h-9 shrink-0 px-3 text-xs" aria-label="Cara memilih foto">
-              <CircleHelp size={14} /> Cara memilih
+            <button type="button" onClick={() => setGuide(true)} className={clsx('shrink-0', simple ? 'btn-ink h-12 px-5 text-sm' : 'btn-ghost h-9 px-3 text-xs')} aria-label="Cara memilih foto">
+              <CircleHelp size={simple ? 18 : 14} /> Cara memilih
             </button>
           )}
         </div>
-        <p className="eyebrow mt-8 animate-rise sm:mt-12">{readOnly ? 'Pilihan tersimpan' : 'Pilih foto favorit Anda'}</p>
-        <h1 className="mt-3 font-display text-5xl italic leading-[0.92] tracking-tight animate-rise sm:text-7xl md:text-8xl" style={{ animationDelay: '60ms' }}>
+        <p className="eyebrow mt-8 animate-rise sm:mt-12">{readOnly ? 'Pilihan tersimpan' : theme.gallery_title || 'Pilih foto favorit Anda'}</p>
+        <h1 className="mt-3 font-display text-5xl leading-[0.92] tracking-tight animate-rise sm:text-7xl md:text-8xl" style={{ animationDelay: '60ms' }}>
           {data.client_name}
         </h1>
         <div className="mt-5 flex flex-wrap items-baseline gap-x-6 gap-y-1 font-mono text-xs text-mute animate-rise" style={{ animationDelay: '120ms' }}>
@@ -259,24 +290,19 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
             </p>
             {deadline && (
               <p className="flex flex-wrap items-center gap-2 pt-2">
-                <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-ink px-3 text-[13px] text-paper">
+                <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-solid px-3 text-[13px] text-onsolid">
                   <CalendarClock size={14} /> Pilih sebelum {deadline.date}
                 </span>
-                <span className={clsx('inline-flex h-8 items-center rounded-full px-3 text-[13px] font-bold', deadline.urgent ? 'bg-danger text-paper' : 'bg-accent text-ink')}>
+                <span className={clsx('inline-flex h-8 items-center rounded-full px-3 text-[13px] font-bold', deadline.urgent ? 'bg-danger text-onsolid' : 'bg-accent text-onaccent')}>
                   {deadline.left}
                 </span>
-              </p>
-            )}
-            {saveState && (
-              <p className="font-mono text-[11px] text-faint" aria-live="polite">
-                {saveState === 'saving' ? 'Menyimpan…' : saveState === 'saved' ? '✓ Pilihan tersimpan otomatis — bisa dilanjutkan nanti' : 'Belum tersimpan ke server (cek koneksi). Pilihan aman di perangkat ini.'}
               </p>
             )}
           </div>
         )}
         {readOnly && (
           <div className="mt-8 flex max-w-xl items-start gap-3 border-t border-line pt-5 animate-rise" style={{ animationDelay: '160ms' }}>
-            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink text-paper">
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-solid text-onsolid">
               <Check size={13} strokeWidth={3} />
             </span>
             <div>
@@ -311,7 +337,7 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
                   onToggle={pick}
                   extra={extraSet.has(p.file_id)}
                   maybe={sel.maybeSet.has(p.file_id)}
-                  onMaybe={sel.toggleMaybe}
+                  onMaybe={simple ? undefined : sel.toggleMaybe}
                   onOpen={setLightbox}
                 />
               ))}
@@ -325,7 +351,8 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
       {!readOnly && (
         <SelectionBar
           count={sel.count}
-          maybeCount={sel.maybe.length}
+          maybeCount={simple ? 0 : sel.maybe.length}
+          saveState={saveState}
           limit={data.photo_limit}
           maxLimit={data.max_limit}
           selected={sel.ids}
@@ -345,7 +372,7 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
           index={lightbox}
           selectedIds={shownIds}
           maybeIds={sel.maybeSet}
-          onMaybe={sel.toggleMaybe}
+          onMaybe={simple ? undefined : sel.toggleMaybe}
           notes={shownNotes}
           onNote={sel.setNote}
           onClose={close}
@@ -358,15 +385,14 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
       )}
 
       {overPrompt && (
-        <div role="dialog" aria-modal="true" aria-labelledby="over-title" className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/50 p-4 animate-fade sm:items-center">
-          <div className="w-full max-w-md rounded-[28px] bg-paper p-6 animate-rise">
+        <Sheet onClose={() => setOverPrompt(null)} labelledBy="over-title">
             <p className="eyebrow">Di luar paket</p>
-            <h2 id="over-title" className="mt-2 font-display text-4xl italic leading-tight">
+            <h2 id="over-title" className="mt-1 pr-10 font-display text-3xl leading-tight">
               Kuota paket sudah penuh
             </h2>
             <p className="mt-3 text-sm">
               {data.photo_limit} foto dalam paket sudah terpilih semua. Foto berikutnya dihitung sebagai <b>foto tambahan</b> (ada biaya tambahan) dan
-              akan diberi label <span className="rounded-full bg-ink px-2 py-0.5 text-xs font-bold text-accent">Tambahan</span>.
+              akan diberi label <span className="rounded-full bg-solid px-2 py-0.5 text-xs font-bold text-accent">Tambahan</span>.
             </p>
             <p className="mt-2 text-sm text-mute">Anda bisa menambah hingga {data.max_limit - data.photo_limit} foto lagi.</p>
             <div className="mt-6 flex flex-wrap gap-2 sm:justify-end">
@@ -385,17 +411,17 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
                 Lanjutkan memilih
               </button>
             </div>
-          </div>
-        </div>
+        </Sheet>
       )}
 
+      {celebrate > 0 && <SuccessPop count={celebrate} onDone={hideCelebrate} />}
+
       {confirming && (
-        <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-4 animate-fade sm:items-center">
-          <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-[28px] bg-paper p-6 animate-rise">
+        <Sheet wide onClose={() => !submitting && setConfirming(false)} persistent={submitting} labelledBy="confirm-title">
             <p className="eyebrow">Periksa sebelum mengirim</p>
-            <h2 className="mt-2 font-display text-4xl italic">Kirim {sel.count} foto pilihan?</h2>
+            <h2 id="confirm-title" className="mt-1 pr-10 font-display text-3xl">Kirim {sel.count} foto pilihan?</h2>
             {nExtra > 0 && (
-              <p className="mt-3 rounded-2xl bg-ink p-4 text-sm text-paper">
+              <p className="mt-3 rounded-2xl bg-solid p-4 text-sm text-onsolid">
                 {data.photo_limit} foto termasuk paket, <b className="text-accent">{nExtra} foto tambahan</b> di luar paket — fotografer akan menghubungi Anda soal biayanya.
                 <span className="mt-1 block text-sand">
                   Ketuk foto untuk menentukan mana yang menjadi <b className="text-ink">tambahan</b> ({extraIds.length}/{nExtra} ditandai).
@@ -418,7 +444,7 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
                       className={clsx('relative block aspect-square w-full overflow-hidden rounded-xl bg-wash disabled:cursor-default', isExtra && 'ring-[3px] ring-inset ring-ink')}
                     >
                       <img src={p.thumb_url} alt="" className="h-full w-full object-cover" />
-                      {isExtra && <span className="absolute inset-x-0 bottom-0 bg-ink py-0.5 text-center font-mono text-[9px] uppercase text-paper">tambahan</span>}
+                      {isExtra && <span className="absolute inset-x-0 bottom-0 bg-solid py-0.5 text-center font-mono text-[9px] uppercase text-onsolid">tambahan</span>}
                       {sel.notes[id] && (
                         <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-paper/90">
                           <MessageSquare size={9} />
@@ -443,8 +469,7 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
                 {submitting ? 'Mengirim…' : 'Ya, kirim'}
               </button>
             </div>
-          </div>
-        </div>
+        </Sheet>
       )}
     </main>
   )

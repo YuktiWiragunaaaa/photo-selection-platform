@@ -1,4 +1,6 @@
+// [ID] Grid foto pilihan klien di halaman admin + pratinjau besar.
 import { useCallback, useEffect, useState } from 'react'
+import { lockScroll } from './Sheet'
 import { ChevronLeft, ChevronRight, MessageSquare, X } from 'lucide-react'
 
 const baseName = (f) => f.replace(/\.[^.]+$/, '')
@@ -15,6 +17,9 @@ export default function AdminPhotoGrid({ slug, token, items }) {
   const close = useCallback(() => setOpen(null), [])
   const go = useCallback((d) => setOpen((i) => (i + d + items.length) % items.length), [items.length])
 
+  const isOpen = open != null
+  useEffect(() => (isOpen ? lockScroll() : undefined), [isOpen]) // kunci scroll saat pratinjau terbuka
+
   useEffect(() => {
     if (open == null) return
     const onKey = (e) => {
@@ -23,10 +28,8 @@ export default function AdminPhotoGrid({ slug, token, items }) {
       if (e.key === 'ArrowLeft') go(-1)
     }
     window.addEventListener('keydown', onKey)
-    document.body.style.overflow = 'hidden'
     return () => {
       window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = ''
     }
   }, [open, close, go])
 
@@ -55,7 +58,7 @@ export default function AdminPhotoGrid({ slug, token, items }) {
               <span className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 px-0.5">
                 <span className="min-w-0 max-w-full truncate font-mono text-[11px] text-mute">{baseName(p.filename)}</span>
                 {p.note && <MessageSquare size={12} className="shrink-0 text-mute" aria-label="Ada catatan" />}
-                {p.is_extra && <span className="shrink-0 rounded-full bg-ink px-1.5 py-0.5 text-[10px] font-bold text-accent">Tambahan</span>}
+                {p.is_extra && <span className="shrink-0 rounded-full bg-solid px-1.5 py-0.5 text-[10px] font-bold text-accent">Tambahan</span>}
               </span>
             </button>
           </li>
@@ -63,7 +66,7 @@ export default function AdminPhotoGrid({ slug, token, items }) {
       </ul>
 
       {cur && (
-        <div role="dialog" aria-modal="true" aria-label={cur.filename} className="on-dark fixed inset-0 z-50 flex flex-col bg-ink text-paper animate-fade">
+        <div role="dialog" aria-modal="true" aria-label={cur.filename} className="on-dark keep-light fixed inset-0 z-50 flex flex-col bg-solid text-onsolid animate-fade">
           <header className="flex h-14 shrink-0 items-center justify-between gap-3 px-4">
             <span className="min-w-0 truncate font-mono text-xs text-sand">
               {String(open + 1).padStart(2, '0')} / {String(items.length).padStart(2, '0')} · {cur.filename}
