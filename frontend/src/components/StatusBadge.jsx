@@ -1,5 +1,6 @@
 // [ID] Label status sesi: Belum dibuka / Memilih / Selesai.
 import clsx from 'clsx'
+import { t } from '../utils/i18n'
 
 /** Pill status: Belum dibuka (not opened yet) · Memilih (client is choosing) · Selesai (submitted). */
 export function sessionState(s) {
@@ -16,5 +17,5 @@ const LOOK = {
 export default function StatusBadge({ status, session, className }) {
   const key = session ? sessionState(session) : status === 'completed' ? 'done' : 'choosing'
   const [label, cls] = LOOK[key]
-  return <span className={clsx('inline-flex h-[26px] shrink-0 items-center rounded-full px-2.5 text-xs font-bold', cls, className)}>{label}</span>
+  return <span className={clsx('inline-flex h-[26px] shrink-0 items-center rounded-full px-2.5 text-xs font-bold', cls, className)}>{t(label)}</span>
 }

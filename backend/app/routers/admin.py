@@ -215,6 +215,7 @@ def update_session(session_id: str, body: SessionUpdate, background: BackgroundT
 def delete_session(session_id: str, background: BackgroundTasks, db: DbSession = Depends(get_db)):
     s = _get_or_404(db, session_id)
     folder = s.drive_folder_id
+    clear_pin_fails(db, s.slug)  # jangan tinggalkan catatan percobaan PIN milik sesi yang sudah hilang
     db.delete(s)
     db.commit()
     still_used = db.query(PhotoSession).filter(PhotoSession.drive_folder_id == folder).count()

@@ -2,9 +2,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Bookmark, Check, ChevronLeft, ChevronRight, MessageSquare, X } from 'lucide-react'
 import clsx from 'clsx'
-import { lockScroll } from './Sheet'
+import { lockScroll, useBackToClose } from './Sheet'
+import { useT } from '../utils/i18n'
 
 export default function Lightbox({ photos, index, selectedIds, extraIds, maybeIds, onMaybe, notes = {}, onNote, onClose, onNavigate, onToggle, disabled, readOnly }) {
+  const t = useT()
   const photo = photos[index]
   const selected = selectedIds.has(photo.file_id)
   const note = notes[photo.file_id] || ''
@@ -34,6 +36,8 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
 
   // Kunci scroll halaman selama tampilan foto besar terbuka (sekali saja, tidak diulang tiap pilih)
   useEffect(() => lockScroll(), [])
+  // tombol Back di HP menutup foto besar, bukan meninggalkan galeri
+  useBackToClose(true, onClose)
 
   useEffect(() => {
     const onKey = (e) => {
@@ -114,7 +118,7 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
           <span className="mx-3 text-ink2">|</span>
           {photo.name}
         </span>
-        <button type="button" onClick={onClose} aria-label="Tutup" className="btn-ghost h-9 w-9 px-0">
+        <button type="button" onClick={onClose} aria-label={t('Tutup')} className="btn-ghost h-9 w-9 px-0">
           <X size={16} />
         </button>
       </header>
@@ -134,7 +138,7 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
         <button
           type="button"
           onClick={() => onNavigate(-1)}
-          aria-label="Sebelumnya"
+          aria-label={t('Sebelumnya')}
           className="absolute left-2 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-ink2 text-onsolid hover:bg-mute sm:flex"
         >
           <ChevronLeft size={18} />
@@ -157,7 +161,7 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
         <button
           type="button"
           onClick={() => onNavigate(1)}
-          aria-label="Berikutnya"
+          aria-label={t('Berikutnya')}
           className="absolute right-2 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-ink2 text-onsolid hover:bg-mute sm:flex"
         >
           <ChevronRight size={18} />
@@ -168,7 +172,7 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
         {noteOpen ? (
           <div className="mx-auto max-w-lg animate-rise">
             <label className="label" htmlFor="note">
-              Catatan untuk fotografer · {photo.name}
+              {t('Catatan untuk fotografer')} · {photo.name}
             </label>
             <textarea
               id="note"
@@ -179,15 +183,15 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
               onChange={(e) => setDraft(e.target.value)}
               onFocus={() => (typing.current = true)}
               onBlur={() => (typing.current = false)}
-              placeholder="Contoh: tolong crop lebih ketat, hapus orang di belakang"
+              placeholder={t('Contoh: tolong crop lebih ketat, hapus orang di belakang')}
               className="w-full resize-none rounded-2xl border-0 bg-ink2 p-3 text-sm text-onsolid placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent"
             />
             <div className="mt-2 flex justify-end gap-2">
               <button type="button" className="btn-ghost h-9 px-3 text-xs" onClick={() => setNoteOpen(false)}>
-                Batal
+                {t('Batal')}
               </button>
               <button type="button" className="btn-accent h-9 px-3 text-xs" onClick={saveNote}>
-                Simpan catatan
+                {t('Simpan catatan')}
               </button>
             </div>
           </div>
@@ -201,7 +205,7 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
             )}
             <div className="flex flex-wrap items-center justify-center gap-2">
               {readOnly ? (
-                <span className="eyebrow">{selected ? 'Foto pilihan' : 'Tidak dipilih'}</span>
+                <span className="eyebrow">{selected ? t('Foto pilihan') : t('Tidak dipilih')}</span>
               ) : (
                 <button
                   type="button"
@@ -210,7 +214,7 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
                   className={clsx(selected ? 'btn-accent' : 'btn bg-paper text-ink hover:bg-sand', 'h-12 sm:min-w-[11rem]')}
                 >
                   <Check size={16} strokeWidth={selected ? 3 : 2} />
-                  {selected ? (extraIds?.has(photo.file_id) ? 'Dipilih · tambahan' : 'Dipilih') : disabled ? 'Kuota penuh' : 'Pilih foto ini'}
+                  {selected ? (extraIds?.has(photo.file_id) ? t('Dipilih · tambahan') : t('Dipilih')) : disabled ? t('Kuota penuh') : t('Pilih foto ini')}
                 </button>
               )}
               {!readOnly && !selected && onMaybe && (
@@ -221,18 +225,18 @@ export default function Lightbox({ photos, index, selectedIds, extraIds, maybeId
                   className={clsx('btn-ghost h-11 px-4', maybeIds?.has(photo.file_id) && 'border-paper')}
                 >
                   <Bookmark size={16} fill={maybeIds?.has(photo.file_id) ? 'currentColor' : 'none'} />
-                  {maybeIds?.has(photo.file_id) ? 'Ditandai' : 'Tandai dulu'}
+                  {maybeIds?.has(photo.file_id) ? t('Ditandai') : t('Tandai dulu')}
                 </button>
               )}
               {canNote && (
                 <button
                   type="button"
                   onClick={() => setNoteOpen(true)}
-                  aria-label={note ? 'Ubah catatan' : 'Tambah catatan'}
-                  title={note ? 'Ubah catatan' : 'Tambah catatan'}
+                  aria-label={note ? t('Ubah catatan') : t('Tambah catatan')}
+                  title={note ? t('Ubah catatan') : t('Tambah catatan')}
                   className={clsx('btn-ghost h-11 px-4', note && 'border-paper')}
                 >
-                  <MessageSquare size={16} /> {note ? 'Ubah catatan' : 'Catatan'}
+                  <MessageSquare size={16} /> {note ? t('Ubah catatan') : t('Catatan')}
                 </button>
               )}
             </div>

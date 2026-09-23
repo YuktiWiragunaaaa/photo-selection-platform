@@ -38,6 +38,44 @@ cd ..\frontend
 npm install
 ```
 
+#### Panduan venv untuk pemula
+
+**venv** ("virtual environment") adalah folder berisi Python khusus untuk proyek ini, dengan paket-paketnya sendiri.
+Tujuannya supaya paket proyek ini tidak bercampur dengan program Python lain di komputer. Folder `backend\venv` cukup dibuat **sekali**.
+
+1. **Pasang Python** dari [python.org/downloads](https://www.python.org/downloads/) (versi 3.11 atau lebih baru).
+   Saat memasang, **centang "Add python.exe to PATH"** di layar pertama. Kalau lupa, pasang ulang dan centang.
+2. **Buka terminal** di folder proyek: buka folder `photo-selection-platform` di File Explorer,
+   klik kolom alamat di atas, ketik `cmd`, lalu tekan Enter.
+3. **Cek Python sudah terpasang:**
+   ```bat
+   python --version
+   ```
+   Harus muncul misalnya `Python 3.12.4`. Kalau muncul "not recognized" atau Microsoft Store terbuka, ulangi langkah 1.
+4. **Buat venv** (sekali saja):
+   ```bat
+   cd backend
+   python -m venv venv
+   ```
+   Akan muncul folder baru `backend\venv`. Prosesnya diam beberapa detik. Itu normal.
+5. **Aktifkan venv:**
+   ```bat
+   venv\Scripts\activate
+   ```
+   Berhasil jika baris terminal diawali `(venv)`. Kalau memakai **PowerShell** dan muncul error "running scripts is disabled",
+   pakai `cmd` saja (langkah 2), atau jalankan `venv\Scripts\activate.bat`.
+6. **Pasang paket** (sekali saja, butuh internet, beberapa menit):
+   ```bat
+   pip install -r requirements.txt
+   ```
+7. Selesai. Untuk keluar dari venv ketik `deactivate`.
+
+**Setiap kali membuka terminal baru**, aktifkan venv lagi (langkah 5) sebelum menjalankan perintah Python proyek ini.
+`jalankan.bat` sudah memakai venv sendiri, jadi untuk pemakaian sehari-hari Anda tidak perlu mengaktifkannya.
+
+**Kalau ada yang rusak** (misalnya error aneh setelah memperbarui Python), hapus folder `backend\venv`
+lalu ulangi langkah 4–6. Data klien **tidak** tersimpan di venv, jadi menghapusnya aman.
+
 ### Mode development (untuk mengubah kode)
 
 Dua terminal: `cd backend && python dev.py` (port 8000) dan `cd frontend && npm run dev` (port 5173, buka `http://localhost:5173/admin`). Perubahan kode langsung terlihat, tapi **lambat jika diakses lewat ngrok** — untuk klien selalu pakai `jalankan.bat`.
@@ -113,6 +151,11 @@ Semua perubahan langsung berlaku untuk klien tanpa build ulang.
 
 ---
 
+### Saat klien memilih
+
+- **PIN 4 kotak angka** di halaman pembuka (keyboard angka di HP, bisa ditempel).
+- **Garis kemajuan** tipis di atas layar, **penggeser cepat** di sisi kanan (pil "foto ke-… / total" yang bisa ditarik naik-turun untuk melompat jauh tanpa menggulir panjang), dan tombol **kembali ke atas**. Semuanya muncul setelah klien menggulir, dan diletakkan agak masuk dari tepi layar agar tetap mudah ditarik di HP dengan layar tepi melengkung.
+
 ## Keamanan
 
 - **PIN galeri 4 digit.** Salah tebak dibatasi 5×/pengunjung dan 10×/galeri per 15 menit.
@@ -121,6 +164,25 @@ Semua perubahan langsung berlaku untuk klien tanpa build ulang.
 - **Login admin** dibatasi 5 salah/alamat dan 20 salah total per 15 menit.
 - Hitungan salah tebak PIN & login **disimpan di database**, jadi tidak kembali nol saat server dinyalakan ulang.
 - Galeri yang kedaluwarsa tertutup untuk klien.
+- **Header keamanan** di setiap respons: web tidak bisa disisipkan (iframe) di situs lain, hanya menjalankan skrip dari server sendiri (+ Google Fonts), dan tidak mengirim alamat halaman ke situs luar.
+- **Tidak diindeks mesin pencari**: `robots.txt`, tag `noindex`, dan header `X-Robots-Tag`, supaya galeri klien tidak muncul di Google.
+
+### Perlindungan bot & scraping dengan Cloudflare (gratis, disarankan saat online)
+
+Cloudflare berdiri di depan hosting dan menyaring bot, scraper, serta serangan sebelum sampai ke server. Tidak perlu mengubah kode.
+
+1. Daftar di [cloudflare.com](https://dash.cloudflare.com/sign-up) → **Add a site** → masukkan domain Anda → pilih paket **Free**.
+2. Cloudflare memberi **2 nameserver**. Ganti nameserver domain di tempat Anda membeli domain (mis. panel Anjas) dengan keduanya. Tunggu aktif (biasanya < 1 jam, paling lama 24 jam).
+3. **SSL/TLS → Overview** → pilih **Full (strict)** (hosting harus sudah punya SSL, mis. AutoSSL di cPanel).
+4. **SSL/TLS → Edge Certificates** → nyalakan **Always Use HTTPS**.
+5. **Security → Bots** → nyalakan **Bot Fight Mode** (memblokir bot pengambil data yang dikenal).
+6. **Security → Settings** → *Security Level* **Medium**; *Browser Integrity Check* **On**.
+7. **Security → WAF → Rate limiting rules** (1 aturan gratis) → buat aturan:
+   *URI Path* **contains** `/api/` → lebih dari **100 permintaan per 10 detik** dari satu IP → **Block** selama 10 detik.
+   Batasnya longgar karena satu galeri memuat puluhan foto sekaligus; turunkan hanya jika perlu.
+8. **Opsional — lindungi halaman admin:** **Security → WAF → Custom rules** → *URI Path* **starts with** `/admin` → **Managed Challenge**. Pengunjung ke halaman admin harus lolos pemeriksaan "bukan robot" dulu.
+
+Cek setelah aktif: buka galeri klien dari HP (harus tetap lancar) dan login admin. Jika klien melihat halaman "Checking your browser" terus-menerus, turunkan *Security Level* ke **Low**.
 
 ## Hosting & dipakai studio lain
 

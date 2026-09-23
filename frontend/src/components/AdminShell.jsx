@@ -1,10 +1,12 @@
 // [ID] Kerangka halaman admin: sidebar (menu + sub-menu Pengaturan), bar atas di HP, tombol mode gelap.
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { ChevronDown, LayoutGrid, LogOut, Moon, Plus, Settings2, Sun } from 'lucide-react'
+import { ChevronDown, Globe, LayoutGrid, LogOut, Moon, Plus, Settings2, Sun } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuth } from '../context/AuthContext'
-import { isDarkFor, setAdminMode, useStudio } from '../utils/theme'
+import { useConfirm } from './ConfirmDialog'
+import { getLang, nextLang, setLang, t } from '../utils/i18n'
+import { isDarkFor, setMode, useStudio } from '../utils/theme'
 
 // Studio identity + theme, shared by every admin page (updates live after saving in Pengaturan)
 export const useBranding = useStudio
@@ -58,15 +60,28 @@ export default function AdminShell({ eyebrow, title, actions, children }) {
   const [, rerender] = useState(0)
   const dark = isDarkFor(branding?.theme)
   const toggleMode = () => {
-    setAdminMode(dark ? 'light' : 'dark')
+    setMode(dark ? 'light' : 'dark')
     rerender((n) => n + 1)
   }
   const modeBtn = (cls) => (
-    <button type="button" onClick={toggleMode} className={cls} aria-label={dark ? 'Mode terang' : 'Mode gelap'} title={dark ? 'Mode terang' : 'Mode gelap'}>
+    <button type="button" onClick={toggleMode} className={cls} aria-label={dark ? t('Mode terang') : t('Mode gelap')} title={dark ? t('Mode terang') : t('Mode gelap')}>
       {dark ? <Sun size={16} /> : <Moon size={16} />}
     </button>
   )
-  const signOut = () => {
+  const langBtn = (cls) => (
+    <button type="button" onClick={() => setLang(nextLang())} className={cls} aria-label={t('Ganti bahasa')} title={t('Ganti bahasa')}>
+      <Globe size={14} />
+      <span className="font-mono text-[11px] font-bold uppercase">{getLang()}</span>
+    </button>
+  )
+  const [ask, confirmDialog] = useConfirm()
+  const signOut = async () => {
+    const ok = await ask({
+      title: t('Keluar dari panel admin?'),
+      message: t('Untuk masuk lagi Anda perlu memasukkan password. Sesi dan pilihan klien tidak terpengaruh.'),
+      confirmLabel: t('Ya, keluar'),
+    })
+    if (!ok) return
     logout()
     navigate('/admin/login')
   }
@@ -80,7 +95,7 @@ export default function AdminShell({ eyebrow, title, actions, children }) {
           <span className="truncate text-[17px] font-extrabold tracking-tight">{studio}</span>
         </Link>
         <NavLink to="/admin" end className={navCls}>
-          <LayoutGrid size={16} /> Semua sesi
+          <LayoutGrid size={16} /> {t('Semua sesi')}
         </NavLink>
         <NavLink
           to="/admin/settings"
@@ -94,7 +109,7 @@ export default function AdminShell({ eyebrow, title, actions, children }) {
             } else setSubOpen(true)
           }}
         >
-          <Settings2 size={16} /> Pengaturan
+          <Settings2 size={16} /> {t('Pengaturan')}
           <ChevronDown size={14} className={clsx('ml-auto transition-transform', showSub && 'rotate-180')} aria-hidden />
         </NavLink>
         {showSub && (
@@ -103,20 +118,23 @@ export default function AdminShell({ eyebrow, title, actions, children }) {
             {SETTINGS_TABS.map(([id, label]) => (
               <Link key={id} to={`/admin/settings/${id}`} className={subCls(currentTab === id)} aria-current={currentTab === id ? 'page' : undefined}>
                 {currentTab === id && <span className="absolute left-[1.2rem] h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />}
-                {label}
+                {t(label)}
               </Link>
             ))}
           </div>
         )}
         <div className="flex-1" />
         <Link to="/admin/new" className="btn-accent h-[50px]">
-          <Plus size={16} strokeWidth={2.6} /> Sesi baru
+          <Plus size={16} strokeWidth={2.6} /> {t('Sesi baru')}
         </Link>
         <div className="mt-2 flex items-center justify-between">
           <button type="button" onClick={signOut} className="flex h-10 items-center gap-2 px-2 text-xs text-sand hover:text-onsolid">
-            <LogOut size={14} /> Keluar
+            <LogOut size={14} /> {t('Keluar')}
           </button>
-          {modeBtn('flex h-10 w-10 items-center justify-center rounded-full text-sand hover:bg-ink2 hover:text-onsolid')}
+          <span className="flex items-center">
+            {langBtn('flex h-10 items-center gap-1.5 rounded-full px-2.5 text-sand hover:bg-ink2 hover:text-onsolid')}
+            {modeBtn('flex h-10 w-10 items-center justify-center rounded-full text-sand hover:bg-ink2 hover:text-onsolid')}
+          </span>
         </div>
       </aside>
 
@@ -127,15 +145,16 @@ export default function AdminShell({ eyebrow, title, actions, children }) {
           <span className="truncate font-extrabold tracking-tight">{studio}</span>
         </Link>
         <div className="flex items-center gap-1">
+          {langBtn('flex h-11 items-center gap-1 rounded-full px-2 text-sand hover:text-onsolid')}
           {modeBtn('flex h-11 w-11 items-center justify-center rounded-full text-sand hover:text-onsolid')}
-          <Link to="/admin/settings" className="flex h-11 w-11 items-center justify-center rounded-full text-sand hover:text-onsolid" aria-label="Pengaturan">
+          <Link to="/admin/settings" className="flex h-11 w-11 items-center justify-center rounded-full text-sand hover:text-onsolid" aria-label={t('Pengaturan')}>
             <Settings2 size={18} />
           </Link>
-          <button type="button" onClick={signOut} className="flex h-11 w-11 items-center justify-center rounded-full text-sand hover:text-onsolid" aria-label="Keluar">
+          <button type="button" onClick={signOut} className="flex h-11 w-11 items-center justify-center rounded-full text-sand hover:text-onsolid" aria-label={t('Keluar')}>
             <LogOut size={18} />
           </button>
           <Link to="/admin/new" className="btn-accent ml-1 h-10 px-4 text-xs">
-            <Plus size={14} strokeWidth={2.6} /> Baru
+            <Plus size={14} strokeWidth={2.6} /> {t('Baru')}
           </Link>
         </div>
       </nav>
@@ -152,6 +171,7 @@ export default function AdminShell({ eyebrow, title, actions, children }) {
         </header>
         <main className="mx-auto max-w-6xl px-4 py-6 sm:px-8 sm:py-8">{children}</main>
       </div>
+      {confirmDialog}
     </div>
   )
 }

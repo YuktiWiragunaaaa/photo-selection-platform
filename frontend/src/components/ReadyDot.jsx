@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adminApi } from '../api/adminApi'
+import { t } from '../utils/i18n'
 
 /** Tiny "is the gallery ready to share?" indicator for the session list. */
 export default function ReadyDot({ sessionId }) {
@@ -28,7 +29,7 @@ export default function ReadyDot({ sessionId }) {
   if (!st || st.total === 0) return null
   return (
     <span className="font-mono text-[11px] text-mute">
-      {st.ready ? 'galeri siap' : `menyiapkan ${Math.round((st.thumb / st.total) * 100)}%`}
+      {st.ready ? t('galeri siap') : t('menyiapkan {n}%', { n: Math.round((st.thumb / st.total) * 100) })}
     </span>
   )
 }

@@ -1,5 +1,6 @@
 // [ID] Menyimpan pilihan, catatan, dan tanda klien (di perangkat + dikirim ke server).
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { t } from '../utils/i18n'
 
 const read = (key, fallback) => {
   try {
@@ -43,7 +44,7 @@ export function useSelection(slug, limit, initial = [], initialNotes = {}, initi
       setIds((prev) => {
         if (prev.includes(id)) return prev.filter((x) => x !== id)
         if (prev.length >= limit) {
-          setWarning(`Maksimal ${limit} foto. Batalkan salah satu untuk mengganti.`)
+          setWarning(t('Maksimal {n} foto. Batalkan salah satu untuk mengganti.', { n: limit }))
           return prev
         }
         setMaybe((m) => (m.includes(id) ? m.filter((x) => x !== id) : m)) // picked → no longer "maybe"

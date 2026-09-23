@@ -2,9 +2,14 @@
 import { memo, useState } from 'react'
 import { Bookmark, Check, Maximize2, MessageSquare } from 'lucide-react'
 import clsx from 'clsx'
+import { useT } from '../utils/i18n'
 
 function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, readOnly, onToggle, onMaybe, onOpen }) {
+  const t = useT()
   const [loaded, setLoaded] = useState(false)
+  // Jaring pengaman: kalau ukuran dari Drive tidak ada/keliru, pakai ukuran gambar yang benar-benar termuat,
+  // supaya foto vertikal tidak pernah dipaksa masuk kotak mendatar.
+  const [rasio, setRasio] = useState(null)
   const dim = readOnly && !selected
 
   return (
@@ -13,14 +18,16 @@ function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, re
         'group relative overflow-hidden rounded-2xl bg-wash animate-fade',
         dim && 'opacity-35',
       )}
-      style={{ aspectRatio: `${photo.width} / ${photo.height}` }}
+      style={{ aspectRatio: rasio || `${photo.width} / ${photo.height}` }}
     >
       <button
         type="button"
         onClick={() => onToggle(photo.file_id)}
-        disabled={readOnly || (disabled && !selected)}
+        disabled={readOnly}
+        // At the quota the tap still fires, so the client sees the "quota full" toast instead of nothing.
+        aria-disabled={disabled && !selected ? true : undefined}
         aria-pressed={selected}
-        aria-label={`${selected ? 'Batalkan' : 'Pilih'} ${photo.name}`}
+        aria-label={t('{action} {name}', { action: selected ? t('Batalkan') : t('Pilih'), name: photo.name })}
         className="absolute inset-0 h-full w-full cursor-pointer disabled:cursor-default"
       >
         <img
@@ -28,7 +35,11 @@ function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, re
           alt={photo.name}
           loading={index < 12 ? 'eager' : 'lazy'}
           decoding="async"
-          onLoad={() => setLoaded(true)}
+          onLoad={(e) => {
+            setLoaded(true)
+            const { naturalWidth: w, naturalHeight: h } = e.currentTarget
+            if (w && h) setRasio(`${w} / ${h}`)
+          }}
           className={clsx(
             'h-full w-full object-cover transition-opacity duration-500',
             loaded ? 'opacity-100' : 'opacity-0',
@@ -74,8 +85,8 @@ function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, re
           type="button"
           onClick={() => onMaybe(photo.file_id)}
           aria-pressed={maybe}
-          aria-label={`${maybe ? 'Hapus tanda' : 'Tandai dulu'} ${photo.name}`}
-          title={maybe ? 'Hapus tanda' : 'Tandai dulu (masih ragu)'}
+          aria-label={t('{action} {name}', { action: maybe ? t('Hapus tanda') : t('Tandai dulu'), name: photo.name })}
+          title={maybe ? t('Hapus tanda') : t('Tandai dulu (masih ragu)')}
           className={clsx(
             'absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full backdrop-blur transition-opacity',
             maybe ? 'bg-solid text-onsolid opacity-100' : 'bg-paper/85 text-ink opacity-0 hover:bg-paper focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100',
@@ -88,7 +99,7 @@ function PhotoTile({ photo, index, selected, extra, maybe, hasNote, disabled, re
       <button
         type="button"
         onClick={() => onOpen(index)}
-        aria-label={`Lihat ${photo.name} lebih besar`}
+        aria-label={t('Lihat {name} lebih besar', { name: photo.name })}
         className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-paper/85 text-ink opacity-0 backdrop-blur transition-opacity hover:bg-paper focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
       >
         <Maximize2 size={14} />

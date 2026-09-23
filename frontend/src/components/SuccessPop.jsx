@@ -1,11 +1,13 @@
 // [ID] Pop-up sukses kecil setelah klien menekan "Kirim": centang yang tergambar,
 // cincin memantul dan titik-titik "confetti". Tidak menutupi seluruh layar, hilang sendiri.
 import { useEffect } from 'react'
+import { useT } from '../utils/i18n'
 
 // Posisi titik confetti (sudut dalam derajat) — dihitung sekali saja
 const DOTS = Array.from({ length: 10 }, (_, i) => i * 36)
 
 export default function SuccessPop({ count, onDone }) {
+  const t = useT()
   useEffect(() => {
     // Getar halus di HP yang mendukung (diabaikan bila tidak ada)
     try { navigator.vibrate?.([18, 40, 28]) } catch { /* abaikan */ }
@@ -37,8 +39,8 @@ export default function SuccessPop({ count, onDone }) {
           </svg>
         </span>
         <span className="text-left">
-          <span className="block text-lg font-extrabold leading-tight">Terkirim!</span>
-          <span className="block text-sm text-sand">{count} foto sudah sampai ke fotografer</span>
+          <span className="block text-lg font-extrabold leading-tight">{t('Terkirim!')}</span>
+          <span className="block text-sm text-sand">{t('{n} foto sudah sampai ke fotografer', { n: count })}</span>
         </span>
       </button>
     </div>

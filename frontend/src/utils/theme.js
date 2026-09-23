@@ -129,29 +129,33 @@ export function loadFonts(names) {
 }
 
 // ---- light / dark mode
-// Clients: follows the studio's "Mode warna" setting (Terang / Gelap / Ikuti perangkat).
-// Admin: the photographer can override it for the admin pages only (sun/moon button in the sidebar).
+// Starting point is the studio's "Mode warna" setting (Terang / Gelap / Ikuti perangkat).
+// On top of that everyone may flip the switch for themselves: the photographer for the admin
+// pages, the client for the gallery. The two choices are stored apart so they never collide.
 const ADMIN_MODE_KEY = 'psp_admin_mode'
+const CLIENT_MODE_KEY = 'psp_client_mode'
 const prefersDark = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches
 const onAdmin = () => typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+const modeKey = () => (onAdmin() ? ADMIN_MODE_KEY : CLIENT_MODE_KEY)
 
-export function getAdminMode() {
+/** The visitor's own light/dark choice for the page they are on ('' = follow the studio setting). */
+export function getMode() {
   try {
-    return localStorage.getItem(ADMIN_MODE_KEY) || ''
+    return localStorage.getItem(modeKey()) || ''
   } catch {
     return ''
   }
 }
-export function setAdminMode(mode) {
+export function setMode(mode) {
   try {
-    mode ? localStorage.setItem(ADMIN_MODE_KEY, mode) : localStorage.removeItem(ADMIN_MODE_KEY)
+    mode ? localStorage.setItem(modeKey(), mode) : localStorage.removeItem(modeKey())
   } catch {}
   if (lastTheme) applyTheme(lastTheme)
 }
 
 let lastTheme = null
 export function isDarkFor(t) {
-  const mode = (onAdmin() && getAdminMode()) || t?.color_mode || 'light'
+  const mode = getMode() || t?.color_mode || 'light'
   return mode === 'dark' || (mode === 'auto' && prefersDark())
 }
 
@@ -205,6 +209,9 @@ export function useStudio() {
 }
 
 // ---- WhatsApp message template
+// Same text as DEFAULT_WA_TEMPLATE in backend/app/services/branding.py; its English version lives in utils/i18n.js
+export { DEFAULT_WA_TEMPLATE } from './waTemplate'
+
 export const WA_PLACEHOLDERS = [
   ['{nama}', 'nama klien'],
   ['{link}', 'link galeri'],

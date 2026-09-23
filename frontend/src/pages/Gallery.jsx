@@ -16,11 +16,15 @@ import Guide from '../components/Guide'
 import SuccessPop from '../components/SuccessPop'
 import Sheet from '../components/Sheet'
 import Intro from '../components/Intro'
+import ScrollProgress from '../components/ScrollProgress'
+import ViewControls from '../components/ViewControls'
 import { applyTheme } from '../utils/theme'
+import { dateLocale, getLang, t, tServer, useT } from '../utils/i18n'
 import { BrandFooter, BrandHeader } from '../components/Brand'
 
 export default function Gallery() {
   const { slug } = useParams()
+  const t = useT()
   const [meta, setMeta] = useState(null)
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
@@ -37,8 +41,8 @@ export default function Gallery() {
         applyTheme(m.branding?.theme) // studio colours & fonts before anything renders
         setMeta(m)
       })
-      .catch((e) => setError(errorMessage(e, 'Galeri tidak bisa dimuat.')))
-  }, [slug])
+      .catch((e) => setError(errorMessage(e, t('Galeri tidak bisa dimuat.'))))
+  }, [slug]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const needsPin = meta?.locked && !galleryToken.get(slug)
 
@@ -51,17 +55,17 @@ export default function Gallery() {
         if (e.response?.status === 401) {
           galleryToken.clear(slug) // stale token (PIN changed) -> ask again
           setUnlockedAt((n) => n + 1)
-        } else setError(errorMessage(e, 'Galeri tidak bisa dimuat.'))
+        } else setError(errorMessage(e, t('Galeri tidak bisa dimuat.')))
       })
-  }, [slug, meta, needsPin, unlockedAt])
+  }, [slug, meta, needsPin, unlockedAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) return <Empty title="Galeri tidak ditemukan" body={error} />
+  if (error) return <Empty title={t('Galeri tidak ditemukan')} body={error} branding={meta?.branding} />
   if (!meta) return <Loading />
   if (meta.expired)
     return (
       <Empty
-        title="Link sudah kedaluwarsa"
-        body="Masa berlaku galeri ini sudah habis. Hubungi fotografer Anda untuk membukanya kembali."
+        title={t('Link sudah kedaluwarsa')}
+        body={t('Masa berlaku galeri ini sudah habis. Hubungi fotografer Anda untuk membukanya kembali.')}
         branding={meta.branding}
       />
     )
@@ -82,6 +86,7 @@ export default function Gallery() {
 }
 
 function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, setConfirming, submitting, setSubmitting, done, setDone }) {
+  const t = useT()
   const readOnly = data.status === 'completed' || !!done
   const sel = useSelection(`${slug}${data.rev ? `_r${data.rev}` : ''}`, data.max_limit, data.selected_ids, data.notes, data.maybe_ids || [])
   const [toast, setToast] = useState('')
@@ -122,7 +127,8 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
       localStorage.setItem(guideKey, '1')
     } catch {}
   }, [guideKey])
-  const deadline = useMemo(() => formatDeadline(data.expires_at), [data.expires_at])
+  const lang = getLang()
+  const deadline = useMemo(() => formatDeadline(data.expires_at), [data.expires_at, lang]) // eslint-disable-line react-hooks/exhaustive-deps
   const shownIds = useMemo(() => (readOnly ? new Set(data.selected_ids) : sel.set), [readOnly, data.selected_ids, sel.set])
   const shownNotes = readOnly ? data.notes || {} : sel.notes
   const selectedCount = shownIds.size
@@ -256,44 +262,51 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
     <main className="min-h-screen pb-44 sm:pb-32">
       {data.preview && (
         <div className="sticky top-0 z-30 bg-solid px-4 py-2.5 text-center text-xs text-onsolid">
-          <b className="text-accent">Mode pratinjau fotografer</b> — yang kamu klik di sini tidak disimpan dan tidak mengubah pilihan klien.
+          <b className="text-accent">{t('Mode pratinjau fotografer')}</b>
+          {t(' — yang kamu klik di sini tidak disimpan dan tidak mengubah pilihan klien.')}
         </div>
       )}
       <Toast message={toast} onClose={() => setToast('')} />
 
       <header className="mx-auto max-w-[1600px] px-4 pt-6 sm:px-6 sm:pt-8">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <BrandHeader branding={b} />
           </div>
-          {!readOnly && (
-            <button type="button" onClick={() => setGuide(true)} className={clsx('shrink-0', simple ? 'btn-ink h-12 px-5 text-sm' : 'btn-ghost h-9 px-3 text-xs')} aria-label="Cara memilih foto">
-              <CircleHelp size={simple ? 18 : 14} /> Cara memilih
-            </button>
-          )}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <ViewControls theme={theme} big={simple} />
+            {!readOnly && (
+              <button type="button" onClick={() => setGuide(true)} className={clsx(simple ? 'btn-ink h-11 px-4 text-sm' : 'btn-ghost h-9 px-3 text-xs')} aria-label={t('Cara memilih foto')}>
+                <CircleHelp size={simple ? 17 : 14} /> {t('Cara memilih')}
+              </button>
+            )}
+          </div>
         </div>
-        <p className="eyebrow mt-8 animate-rise sm:mt-12">{readOnly ? 'Pilihan tersimpan' : theme.gallery_title || 'Pilih foto favorit Anda'}</p>
+        <p className="eyebrow mt-8 animate-rise sm:mt-12">{readOnly ? t('Pilihan tersimpan') : theme.gallery_title || t('Pilih foto favorit Anda')}</p>
         <h1 className="mt-3 font-display text-5xl leading-[0.92] tracking-tight animate-rise sm:text-7xl md:text-8xl" style={{ animationDelay: '60ms' }}>
           {data.client_name}
         </h1>
         <div className="mt-5 flex flex-wrap items-baseline gap-x-6 gap-y-1 font-mono text-xs text-mute animate-rise" style={{ animationDelay: '120ms' }}>
-          <span>{data.photos.length} foto</span>
+          <span>{t('{n} foto', { n: data.photos.length })}</span>
           <span>
-            {data.photo_limit} foto termasuk paket
-            {data.max_limit > data.photo_limit && ` · hingga ${data.max_limit} dengan tambahan`}
+            {t('{n} foto termasuk paket', { n: data.photo_limit })}
+            {data.max_limit > data.photo_limit && t(' · hingga {n} dengan tambahan', { n: data.max_limit })}
           </span>
         </div>
         {!readOnly && (
           <div className="mt-4 space-y-1 text-sm animate-rise" style={{ animationDelay: '140ms' }}>
             <p className="text-mute">
-              <b className="text-ink">Ketuk foto</b> untuk memilih · tekan <b className="text-ink">⤢</b> untuk melihat besar &amp; menulis catatan.
+              <b className="text-ink">{t('Ketuk foto')}</b>
+              {t(' untuk memilih · tekan ')}
+              <b className="text-ink">⤢</b>
+              {t(' untuk melihat besar & menulis catatan.')}
             </p>
             {deadline && (
               <p className="flex flex-wrap items-center gap-2 pt-2">
                 <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-solid px-3 text-[13px] text-onsolid">
-                  <CalendarClock size={14} /> Pilih sebelum {deadline.date}
+                  <CalendarClock size={14} /> {t('Pilih sebelum {date}', { date: deadline.date })}
                 </span>
-                <span className={clsx('inline-flex h-8 items-center rounded-full px-3 text-[13px] font-bold', deadline.urgent ? 'bg-danger text-onsolid' : 'bg-accent text-onaccent')}>
+                <span className={clsx('inline-flex h-8 items-center rounded-full px-3 text-[13px] font-bold', deadline.urgent ? 'bg-danger text-paper' : 'bg-accent text-onaccent')}>
                   {deadline.left}
                 </span>
               </p>
@@ -306,14 +319,20 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
               <Check size={13} strokeWidth={3} />
             </span>
             <div>
-              <p className="text-sm">{done?.message ?? `${selectedCount} foto pilihan sudah tersimpan.${extras ? ` ${extras} di antaranya di luar paket.` : ''}`}</p>
-              <p className="mt-1 text-sm text-mute">Galeri ini sekarang hanya bisa dilihat. Foto yang Anda pilih ditandai; hubungi fotografer jika ingin mengubah.</p>
+              <p className="text-sm">
+                {done?.message
+                  ? tServer(done.message)
+                  : t('{n} foto pilihan sudah tersimpan.', { n: selectedCount }) + (extras ? t(' {n} di antaranya di luar paket.', { n: extras }) : '')}
+              </p>
+              <p className="mt-1 text-sm text-mute">
+                {t('Galeri ini sekarang hanya bisa dilihat. Foto yang Anda pilih ditandai; hubungi fotografer jika ingin mengubah.')}
+              </p>
               <button
                 type="button"
                 onClick={() => setFilter((f) => (f === 'all' ? 'selected' : 'all'))}
                 className="btn-ghost mt-4 h-9 px-4 text-xs"
               >
-                {filter === 'all' ? `Lihat ${selectedCount} pilihan saja` : 'Lihat semua foto'}
+                {filter === 'all' ? t('Lihat {n} pilihan saja', { n: selectedCount }) : t('Lihat semua foto')}
               </button>
             </div>
           </div>
@@ -321,7 +340,7 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
         <hr className="mt-8 border-line sm:mt-12" />
       </header>
 
-      <section className="mx-auto max-w-[1600px] px-2 pt-2 sm:px-6 sm:pt-4" aria-label="Galeri foto">
+      <section className="mx-auto max-w-[1600px] px-2 pt-2 sm:px-6 sm:pt-4" aria-label={t('Galeri foto')}>
         <div className="masonry">
           {columns.map((col, c) => (
             <div key={c} className="masonry-col">
@@ -345,6 +364,8 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
           ))}
         </div>
       </section>
+
+      <ScrollProgress total={visible.length} raisedForBar={!readOnly} />
 
       <BrandFooter branding={b} />
 
@@ -386,18 +407,20 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
 
       {overPrompt && (
         <Sheet onClose={() => setOverPrompt(null)} labelledBy="over-title">
-            <p className="eyebrow">Di luar paket</p>
+            <p className="eyebrow">{t('Di luar paket')}</p>
             <h2 id="over-title" className="mt-1 pr-10 font-display text-3xl leading-tight">
-              Kuota paket sudah penuh
+              {t('Kuota paket sudah penuh')}
             </h2>
             <p className="mt-3 text-sm">
-              {data.photo_limit} foto dalam paket sudah terpilih semua. Foto berikutnya dihitung sebagai <b>foto tambahan</b> (ada biaya tambahan) dan
-              akan diberi label <span className="rounded-full bg-solid px-2 py-0.5 text-xs font-bold text-accent">Tambahan</span>.
+              {t('{n} foto dalam paket sudah terpilih semua. Foto berikutnya dihitung sebagai ', { n: data.photo_limit })}
+              <b>{t('foto tambahan')}</b>
+              {t(' (ada biaya tambahan) dan akan diberi label ')}
+              <span className="rounded-full bg-solid px-2 py-0.5 text-xs font-bold text-accent">{t('Tambahan')}</span>.
             </p>
-            <p className="mt-2 text-sm text-mute">Anda bisa menambah hingga {data.max_limit - data.photo_limit} foto lagi.</p>
+            <p className="mt-2 text-sm text-mute">{t('Anda bisa menambah hingga {n} foto lagi.', { n: data.max_limit - data.photo_limit })}</p>
             <div className="mt-6 flex flex-wrap gap-2 sm:justify-end">
               <button type="button" className="btn-ghost" onClick={() => setOverPrompt(null)}>
-                Batal
+                {t('Batal')}
               </button>
               <button
                 type="button"
@@ -408,7 +431,7 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
                   setOverPrompt(null)
                 }}
               >
-                Lanjutkan memilih
+                {t('Lanjutkan memilih')}
               </button>
             </div>
         </Sheet>
@@ -418,13 +441,17 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
 
       {confirming && (
         <Sheet wide onClose={() => !submitting && setConfirming(false)} persistent={submitting} labelledBy="confirm-title">
-            <p className="eyebrow">Periksa sebelum mengirim</p>
-            <h2 id="confirm-title" className="mt-1 pr-10 font-display text-3xl">Kirim {sel.count} foto pilihan?</h2>
+            <p className="eyebrow">{t('Periksa sebelum mengirim')}</p>
+            <h2 id="confirm-title" className="mt-1 pr-10 font-display text-3xl">{t('Kirim {n} foto pilihan?', { n: sel.count })}</h2>
             {nExtra > 0 && (
               <p className="mt-3 rounded-2xl bg-solid p-4 text-sm text-onsolid">
-                {data.photo_limit} foto termasuk paket, <b className="text-accent">{nExtra} foto tambahan</b> di luar paket — fotografer akan menghubungi Anda soal biayanya.
+                {t('{n} foto termasuk paket, ', { n: data.photo_limit })}
+                <b className="text-accent">{t('{n} foto tambahan', { n: nExtra })}</b>
+                {t(' di luar paket — fotografer akan menghubungi Anda soal biayanya.')}
                 <span className="mt-1 block text-sand">
-                  Ketuk foto untuk menentukan mana yang menjadi <b className="text-ink">tambahan</b> ({extraIds.length}/{nExtra} ditandai).
+                  {t('Ketuk foto untuk menentukan mana yang menjadi ')}
+                  <b className="text-ink">{t('tambahan')}</b>
+                  {t(' ({n}/{total} ditandai).', { n: extraIds.length, total: nExtra })}
                 </span>
               </p>
             )}
@@ -440,11 +467,11 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
                       disabled={!nExtra}
                       onClick={() => toggleExtra(id)}
                       aria-pressed={isExtra}
-                      aria-label={`${p.name}${isExtra ? ', tambahan' : ''}`}
+                      aria-label={`${p.name}${isExtra ? t(', tambahan') : ''}`}
                       className={clsx('relative block aspect-square w-full overflow-hidden rounded-xl bg-wash disabled:cursor-default', isExtra && 'ring-[3px] ring-inset ring-ink')}
                     >
                       <img src={p.thumb_url} alt="" className="h-full w-full object-cover" />
-                      {isExtra && <span className="absolute inset-x-0 bottom-0 bg-solid py-0.5 text-center font-mono text-[9px] uppercase text-onsolid">tambahan</span>}
+                      {isExtra && <span className="absolute inset-x-0 bottom-0 bg-solid py-0.5 text-center font-mono text-[9px] uppercase text-onsolid">{t('tambahan')}</span>}
                       {sel.notes[id] && (
                         <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-paper/90">
                           <MessageSquare size={9} />
@@ -457,16 +484,16 @@ function GalleryView({ slug, data, setData, lightbox, setLightbox, confirming, s
             </ul>
             {Object.keys(sel.notes).length > 0 && (
               <p className="mt-3 flex items-center gap-1.5 text-xs text-mute">
-                <MessageSquare size={12} /> {Object.keys(sel.notes).length} catatan ikut terkirim
+                <MessageSquare size={12} /> {t('{n} catatan ikut terkirim', { n: Object.keys(sel.notes).length })}
               </p>
             )}
-            <p className="mt-3 text-sm text-mute">Setelah dikirim, pilihan tidak bisa diubah lagi dari halaman ini.</p>
+            <p className="mt-3 text-sm text-mute">{t('Setelah dikirim, pilihan tidak bisa diubah lagi dari halaman ini.')}</p>
             <div className="mt-6 flex flex-wrap gap-2 sm:justify-end">
               <button type="button" className="btn-ghost" onClick={() => setConfirming(false)} disabled={submitting}>
-                Periksa lagi
+                {t('Periksa lagi')}
               </button>
               <button type="button" className="btn-accent" onClick={submit} disabled={submitting || extraIds.length !== nExtra}>
-                {submitting ? 'Mengirim…' : 'Ya, kirim'}
+                {submitting ? t('Mengirim…') : t('Ya, kirim')}
               </button>
             </div>
         </Sheet>
@@ -480,30 +507,31 @@ function formatDeadline(iso) {
   const d = new Date(iso)
   const days = Math.ceil((d - Date.now()) / 86400000)
   return {
-    date: d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' }),
-    left: days <= 0 ? 'hari ini' : days === 1 ? 'besok' : `${days} hari lagi`,
+    date: d.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' }),
+    left: days <= 0 ? t('hari ini') : days === 1 ? t('besok') : t('{n} hari lagi', { n: days }),
     urgent: days <= 2,
   }
 }
 
 function Loading() {
+  const t = useT()
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <span className="eyebrow animate-pulse">Memuat galeri</span>
+      <span className="eyebrow animate-pulse">{t('Memuat galeri')}</span>
     </div>
   )
 }
 
 function Empty({ title, body, branding }) {
+  const t = useT()
   return (
     <main className="flex min-h-screen flex-col px-6">
-      {branding && (
-        <div className="pt-6">
-          <BrandHeader branding={branding} />
-        </div>
-      )}
+      <div className="flex items-start justify-between gap-3 pt-6">
+        {branding ? <BrandHeader branding={branding} /> : <span />}
+        <ViewControls theme={branding?.theme} />
+      </div>
       <div className="m-auto max-w-md text-center">
-        <p className="eyebrow">Tidak tersedia</p>
+        <p className="eyebrow">{t('Tidak tersedia')}</p>
         <h1 className="mt-3 font-display text-4xl">{title}</h1>
         <p className="mt-3 text-sm text-mute">{body}</p>
       </div>

@@ -1,6 +1,7 @@
 // [ID] Pop-up panduan "Cara memilih" untuk klien.
 import { ArrowRight, Check, Maximize2, MessageSquare, Send } from 'lucide-react'
 import Sheet from './Sheet'
+import { useT } from '../utils/i18n'
 
 const STEPS = [
   { icon: Check, title: 'Ketuk foto untuk memilih', body: 'Ketuk lagi untuk membatalkan.' },
@@ -11,16 +12,23 @@ const STEPS = [
 
 /** Short how-to, shown once after the intro and reopenable from “Cara memilih”. */
 export default function Guide({ limit, maxLimit, deadline, onClose }) {
+  const t = useT()
   return (
     <Sheet onClose={onClose} labelledBy="guide-title">
-      <p className="eyebrow">Panduan</p>
+      <p className="eyebrow">{t('Panduan')}</p>
       <h2 id="guide-title" className="mt-1 pr-10 font-display text-3xl leading-tight">
-        Cara memilih foto
+        {t('Cara memilih foto')}
       </h2>
       <p className="mt-2 text-sm text-mute">
-        Pilih <b className="text-ink">{limit} foto</b>
-        {maxLimit > limit && <> (bisa sampai {maxLimit} dengan biaya tambahan)</>}
-        {deadline && <> sebelum <b className="text-ink">{deadline}</b></>}.
+        {t('Pilih')} <b className="text-ink">{t('{n} foto', { n: limit })}</b>
+        {maxLimit > limit && <>{t(' (bisa sampai {n} dengan biaya tambahan)', { n: maxLimit })}</>}
+        {deadline && (
+          <>
+            {t(' sebelum ')}
+            <b className="text-ink">{deadline}</b>
+          </>
+        )}
+        .
       </p>
       <ol className="mt-5 grid gap-3">
         {STEPS.map(({ icon: Icon, title, body }, i) => (
@@ -29,14 +37,14 @@ export default function Guide({ limit, maxLimit, deadline, onClose }) {
               <Icon size={15} />
             </span>
             <span className="min-w-0">
-              <span className="block text-sm font-semibold leading-snug">{title}</span>
-              <span className="block text-[13px] leading-snug text-mute">{body}</span>
+              <span className="block text-sm font-semibold leading-snug">{t(title)}</span>
+              <span className="block text-[13px] leading-snug text-mute">{t(body)}</span>
             </span>
           </li>
         ))}
       </ol>
       <button type="button" className="btn-accent mt-6 h-12 w-full" onClick={onClose}>
-        Mulai memilih <ArrowRight size={16} />
+        {t('Mulai memilih')} <ArrowRight size={16} />
       </button>
     </Sheet>
   )

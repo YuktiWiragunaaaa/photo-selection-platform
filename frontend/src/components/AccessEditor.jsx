@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { Pencil, Shuffle } from 'lucide-react'
 import { adminApi } from '../api/adminApi'
 import { errorMessage } from '../api/client'
+import { useConfirm } from './ConfirmDialog'
+import { t } from '../utils/i18n'
 import { randomPin, rememberPin } from '../utils/pin'
 
 const toDateInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : '')
@@ -14,6 +16,7 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
   const [f, setF] = useState({})
   const [check, setCheck] = useState(null) // folder check result
   const [checking, setChecking] = useState(false)
+  const [ask, confirmDialog] = useConfirm()
 
   const start = () => {
     setF({
@@ -46,7 +49,15 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
   }
 
   const save = async () => {
-    if (folderChanged && !confirm('Folder Drive diganti. Foto di galeri klien akan mengikuti folder baru. Lanjutkan?')) return
+    if (
+      folderChanged &&
+      !(await ask({
+        title: t('Ganti folder Drive sesi ini?'),
+        message: t('Foto di galeri klien akan mengikuti folder baru. Pilihan yang sudah ada bisa tidak cocok lagi dengan foto barunya.'),
+        confirmLabel: t('Ya, ganti folder'),
+      }))
+    )
+      return
     setBusy(true)
     try {
       const body = {
@@ -65,7 +76,7 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
       if (f.pinMode === 'set') rememberPin(s.id, f.pin)
       if (f.pinMode === 'none') rememberPin(s.id, '')
       onSaved(saved)
-      onToast(folderChanged ? 'Sesi disimpan. Galeri sedang dimuat ulang dari folder baru.' : 'Sesi disimpan')
+      onToast(folderChanged ? t('Sesi disimpan. Galeri sedang dimuat ulang dari folder baru.') : t('Sesi disimpan'))
       setOpen(false)
     } catch (e) {
       onToast(errorMessage(e))
@@ -77,7 +88,7 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
   if (!open) {
     return (
       <button type="button" onClick={start} className="btn-ghost mt-4 h-9 px-3 text-xs">
-        <Pencil size={12} /> Edit sesi
+        <Pencil size={12} /> {t('Edit sesi')}
       </button>
     )
   }
@@ -86,19 +97,19 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
 
   return (
     <div className="mt-4 rounded-xl border border-line p-4 animate-rise">
-      <p className="eyebrow mb-4">Edit sesi</p>
+      <p className="eyebrow mb-4">{t('Edit sesi')}</p>
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <label className="label" htmlFor="e-name">Nama klien</label>
+          <label className="label" htmlFor="e-name">{t('Nama klien')}</label>
           <input autoComplete="off" id="e-name" className="field" value={f.client_name} onChange={set('client_name')} />
         </div>
         <div className="col-span-2">
-          <label className="label" htmlFor="e-wa">Nomor WhatsApp klien (opsional)</label>
+          <label className="label" htmlFor="e-wa">{t('Nomor WhatsApp klien (opsional)')}</label>
           <input autoComplete="off" id="e-wa" inputMode="tel" className="field font-mono text-sm" value={f.client_wa} onChange={set('client_wa')} placeholder="0812-3456-7890" maxLength={25} />
-          <p className="mt-1 text-[11px] text-mute">Kalau diisi, tombol “Kirim lewat WhatsApp” langsung membuka chat klien ini. Kosongkan untuk memilih kontak sendiri.</p>
+          <p className="mt-1 text-[11px] text-mute">{t('Kalau diisi, tombol “Kirim lewat WhatsApp” langsung membuka chat klien ini. Kosongkan untuk memilih kontak sendiri.')}</p>
         </div>
         <div className="col-span-2">
-          <label className="label" htmlFor="e-folder">Folder Google Drive</label>
+          <label className="label" htmlFor="e-folder">{t('Folder Google Drive')}</label>
           <input autoComplete="off"
             id="e-folder"
             className="field font-mono text-sm"
@@ -108,18 +119,18 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
               setCheck(null)
             }}
             onBlur={checkFolder}
-            placeholder="Tempel link folder atau ID-nya"
+            placeholder={t('Tempel link folder atau ID-nya')}
           />
           <p className="mt-1 text-[11px] text-mute">
-            {checking ? 'Memeriksa folder…' : check ? <span className={check.ok ? 'text-ink' : 'text-danger'}>{check.message}</span> : 'Salah tempel link? Ganti di sini — link galeri klien tetap sama.'}
+            {checking ? t('Memeriksa folder…') : check ? <span className={check.ok ? 'text-ink' : 'text-danger'}>{check.message}</span> : t('Salah tempel link? Ganti di sini — link galeri klien tetap sama.')}
           </p>
         </div>
         <div>
-          <label className="label" htmlFor="e-limit">Foto dalam paket</label>
+          <label className="label" htmlFor="e-limit">{t('Foto dalam paket')}</label>
           <input autoComplete="off" id="e-limit" type="number" min={1} max={1000} className="field font-mono" value={f.photo_limit} onChange={set('photo_limit')} />
         </div>
         <div>
-          <label className="label" htmlFor="e-max">Maksimal dengan tambahan</label>
+          <label className="label" htmlFor="e-max">{t('Maksimal dengan tambahan')}</label>
           <input autoComplete="off" id="e-max" type="number" min={f.photo_limit || 1} max={2000} className="field font-mono" value={f.max_limit} onChange={set('max_limit')} placeholder="—" />
         </div>
         <div>
@@ -136,7 +147,7 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
                 onClick={() => setF({ ...f, pinMode: v, pin: v === 'set' && !f.pin ? randomPin() : f.pin })}
                 className={`rounded-full border px-3 py-1.5 ${f.pinMode === v ? 'border-ink bg-solid text-onsolid' : 'border-line text-mute hover:border-ink'}`}
               >
-                {label}
+                {t(label)}
               </button>
             ))}
           </div>
@@ -146,29 +157,29 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
                 inputMode="numeric"
                 maxLength={4}
                 className="field font-mono tracking-[0.3em]"
-                placeholder="4 digit"
+                placeholder={t('4 digit')}
                 value={f.pin}
                 onChange={(e) => setF({ ...f, pin: e.target.value.replace(/\D/g, '') })}
               />
-              <button type="button" className="btn-ghost h-9 shrink-0 px-3 text-xs" onClick={() => setF({ ...f, pin: randomPin() })} title="Buat PIN acak">
-                <Shuffle size={12} /> Acak
+              <button type="button" className="btn-ghost h-9 shrink-0 px-3 text-xs" onClick={() => setF({ ...f, pin: randomPin() })} title={t('Buat PIN acak')}>
+                <Shuffle size={12} /> {t('Acak')}
               </button>
             </div>
           )}
         </div>
         <div>
-          <label className="label" htmlFor="e-exp">Berlaku sampai</label>
+          <label className="label" htmlFor="e-exp">{t('Berlaku sampai')}</label>
           <input autoComplete="off" id="e-exp" type="date" className="field font-mono text-sm" value={f.expires_at} onChange={set('expires_at')} />
-          <p className="mt-1 text-[11px] text-mute">Kosongkan untuk tanpa batas.</p>
+          <p className="mt-1 text-[11px] text-mute">{t('Kosongkan untuk tanpa batas.')}</p>
         </div>
         <div className="col-span-2">
-          <label className="label" htmlFor="e-notes">Catatan</label>
+          <label className="label" htmlFor="e-notes">{t('Catatan')}</label>
           <input autoComplete="off" id="e-notes" className="field" value={f.notes} onChange={set('notes')} placeholder="Prewedding, batch 1" />
         </div>
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <button type="button" className="btn-ghost h-9 px-3 text-xs" onClick={() => setOpen(false)} disabled={busy}>
-          Batal
+          {t('Batal')}
         </button>
         <button
           type="button"
@@ -176,9 +187,10 @@ export default function AccessEditor({ session: s, onSaved, onToast }) {
           onClick={save}
           disabled={busy || checking || !f.client_name.trim() || (f.pinMode === 'set' && f.pin.length !== 4) || (folderChanged && check && !check.ok)}
         >
-          {busy ? 'Menyimpan…' : 'Simpan'}
+          {busy ? t('Menyimpan…') : t('Simpan')}
         </button>
       </div>
+      {confirmDialog}
     </div>
   )
 }

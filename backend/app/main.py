@@ -63,6 +63,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# [ID] Header keamanan: web tidak bisa disisipkan di situs lain, hanya menjalankan skrip dari server
+# sendiri (+ font Google), dan tidak diindeks mesin pencari.
+CSP = "; ".join(
+    [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' data: https://fonts.gstatic.com",
+        "img-src 'self' data: blob:",
+        "media-src 'self' blob:",
+        "connect-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ]
+)
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CSP,
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+    "X-Robots-Tag": "noindex, nofollow, noarchive, noimageindex",
+}
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    for k, v in SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    if request.url.scheme == "https":  # only over HTTPS, or browsers would refuse plain-HTTP testing
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
+
 app.include_router(admin.router)
 app.include_router(gallery.router)
 

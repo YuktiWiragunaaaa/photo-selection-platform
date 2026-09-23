@@ -4,6 +4,7 @@ import hmac
 import json
 import re
 import time
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -158,6 +159,19 @@ def branding_logo():
     if not p:
         raise HTTPException(404)
     return FileResponse(p, headers={"Cache-Control": "public, max-age=86400"})
+
+
+DEFAULT_ICON = Path(__file__).resolve().parents[3] / "frontend" / "public" / "favicon.svg"
+
+
+@router.get("/branding/icon", include_in_schema=False)
+def branding_icon():
+    """Browser tab icon: the studio logo when one is uploaded, otherwise the default icon."""
+    p = branding.logo_path() or DEFAULT_ICON
+    if not p.is_file():
+        raise HTTPException(404)
+    # Short cache so a newly uploaded logo shows up in the tab within the hour.
+    return FileResponse(p, headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.get("/gallery/{slug}/meta", response_model=GalleryMeta)

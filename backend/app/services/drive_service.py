@@ -33,7 +33,7 @@ IMAGE_MIMES = ("image/jpeg", "image/png", "image/webp")
 THUMB_PX = 640
 FULL_PX = 2048  # lightbox size; originals (often 15 MB+) are never kept
 DRIVE_API = "https://www.googleapis.com/drive/v3"
-LIST_FIELDS = "nextPageToken, files(id, name, mimeType, thumbnailLink, imageMediaMetadata(width, height))"
+LIST_FIELDS = "nextPageToken, files(id, name, mimeType, thumbnailLink, imageMediaMetadata(width, height, rotation))"
 
 _list_cache: dict[str, list["DrivePhoto"]] = {}
 _list_lock = threading.Lock()
@@ -137,12 +137,17 @@ def _list_real(folder_id: str) -> list[DrivePhoto]:
                 if f.get("mimeType") not in IMAGE_MIMES:
                     continue
                 meta = f.get("imageMediaMetadata") or {}
+                w, h = int(meta.get("width") or 3), int(meta.get("height") or 2)
+                # Kamera menyimpan foto potret sebagai gambar mendatar + tanda rotasi (1 atau 3 = 90°/270°).
+                # Thumbnail dari Drive sudah diputar, jadi ukurannya harus ikut ditukar.
+                if int(meta.get("rotation") or 0) % 2 == 1:
+                    w, h = h, w
                 photos.append(
                     DrivePhoto(
                         file_id=f["id"],
                         filename=f["name"],
-                        width=int(meta.get("width") or 3),
-                        height=int(meta.get("height") or 2),
+                        width=w,
+                        height=h,
                         thumbnail_link=f.get("thumbnailLink"),
                     )
                 )

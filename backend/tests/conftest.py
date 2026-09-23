@@ -9,6 +9,9 @@ TMP = Path(tempfile.mkdtemp(prefix="pilihfoto-test-"))
 os.environ["DATABASE_URL"] = f"sqlite:///{TMP / 'test.db'}"
 os.environ["ADMIN_PASSWORD"] = "rahasia-tes"
 os.environ["SECRET_KEY"] = "kunci-tes"
+# Wajib terpisah: saat start, server menghapus cache milik sesi yang tidak ada di database.
+# Dengan database tes yang kosong, cache foto asli ikut terhapus kalau folder ini sama.
+os.environ["CACHE_DIR"] = str(TMP / "cache")
 
 from fastapi.testclient import TestClient  # noqa: E402  (harus setelah env di atas)
 

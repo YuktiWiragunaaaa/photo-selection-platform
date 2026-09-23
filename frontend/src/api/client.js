@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { t, tServer } from '../utils/i18n'
 
 export const TOKEN_KEY = 'psp_admin_token'
 
@@ -27,10 +28,11 @@ api.interceptors.response.use(
   },
 )
 
-export const errorMessage = (err, fallback = 'Terjadi kesalahan. Coba lagi.') => {
+// Pesan dari server selalu bahasa Indonesia; diterjemahkan di sini — satu pintu untuk semua halaman.
+export const errorMessage = (err, fallback) => {
   const d = err?.response?.data?.detail
-  if (typeof d === 'string') return d
+  if (typeof d === 'string') return tServer(d)
   if (Array.isArray(d)) return d.map((x) => x.msg).join(', ')
-  if (!err?.response) return 'Server tidak bisa dihubungi.'
-  return fallback
+  if (!err?.response) return t('Server tidak bisa dihubungi.')
+  return fallback || t('Terjadi kesalahan. Coba lagi.')
 }

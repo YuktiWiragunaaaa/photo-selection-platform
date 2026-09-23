@@ -1,5 +1,6 @@
 // [ID] Animasi pembuka di galeri klien (Logo → pojok, huruf per huruf, fade, video).
 import { useEffect, useRef, useState } from 'react'
+import { t } from '../utils/i18n'
 
 /**
  * Opening title card for the studio. Style is chosen in Pengaturan → Intro & galeri:
@@ -146,7 +147,7 @@ export default function Intro({ branding, clientName, slug }) {
         <div className="intro-morph-text mt-8 flex flex-col items-center">
           {name && <p className="text-center font-display text-3xl leading-none sm:text-4xl">{name}</p>}
           <p className="mt-4 text-center text-sm text-onsolid/75">
-            {theme.intro_text ?? 'Galeri untuk'} <span className="font-display text-lg text-onsolid">{clientName}</span>
+            {theme.intro_text ?? t('Galeri untuk')} <span className="font-display text-lg text-onsolid">{clientName}</span>
           </p>
         </div>
         <SkipHint show={phase === 'in'} />
@@ -167,7 +168,7 @@ export default function Intro({ branding, clientName, slug }) {
           {hasLogo && <img src={branding.logo_url} alt="" className="mb-6 h-24 w-auto max-w-[240px] object-contain sm:h-28" />}
           {name && <p className="text-center font-display text-4xl leading-none sm:text-5xl">{name}</p>}
           <p className="mt-5 text-center text-sm text-onsolid/75">
-            {theme.intro_text ?? 'Galeri untuk'} <span className="font-display text-lg text-onsolid">{clientName}</span>
+            {theme.intro_text ?? t('Galeri untuk')} <span className="font-display text-lg text-onsolid">{clientName}</span>
           </p>
         </div>
       </div>
@@ -199,7 +200,7 @@ export default function Intro({ branding, clientName, slug }) {
       )}
       <div className="intro-line mt-10 h-[3px] w-24 rounded-full bg-accent" />
       <p className="intro-sub mt-6 text-center text-sm text-onsolid/80" style={{ animationDelay: '1300ms' }}>
-        {theme.intro_text ?? 'Galeri untuk'} <span className="font-display text-xl text-onsolid">{clientName}</span>
+        {theme.intro_text ?? t('Galeri untuk')} <span className="font-display text-xl text-onsolid">{clientName}</span>
       </p>
       <SkipHint show />
     </div>
@@ -210,7 +211,7 @@ function SkipHint({ show }) {
   if (!show) return null
   return (
     <p className="intro-sub absolute bottom-[max(24px,env(safe-area-inset-bottom))] left-0 right-0 text-center font-mono text-[10px] uppercase tracking-eyebrow text-onsolid/40" style={{ animationDelay: '1200ms' }}>
-      Ketuk untuk masuk
+      {t('Ketuk untuk masuk')}
     </p>
   )
 }

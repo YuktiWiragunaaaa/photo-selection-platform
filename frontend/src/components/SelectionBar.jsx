@@ -1,6 +1,7 @@
 // [ID] Bar bawah galeri klien: jumlah terpilih, status simpan, filter, tombol Kirim.
 import { ArrowRight } from 'lucide-react'
 import clsx from 'clsx'
+import { useT } from '../utils/i18n'
 
 /**
  * Sticky contact strip: counter (like a frame counter), a filmstrip of the last
@@ -8,6 +9,7 @@ import clsx from 'clsx'
  * row so nothing collides with the counter or the submit button.
  */
 export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, saveState = '', selected, photoById, onSubmit, submitting, filter, onFilter }) {
+  const t = useT()
   const hard = maxLimit || limit
   const extras = Math.max(0, count - limit)
   const pct = Math.min(100, (count / limit) * 100)
@@ -15,19 +17,19 @@ export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, s
   const recent = selected.slice(-6).reverse()
 
   const status = full
-    ? 'Kuota terpenuhi'
+    ? t('Kuota terpenuhi')
     : count === 0
-      ? 'Ketuk foto untuk memilih'
+      ? t('Ketuk foto untuk memilih')
       : extras > 0
-        ? `${extras} di luar paket`
+        ? t('{n} di luar paket', { n: extras })
         : count < limit
-          ? `Sisa ${limit - count} foto dalam paket`
-          : 'Paket terpenuhi'
+          ? t('Sisa {n} foto dalam paket', { n: limit - count })
+          : t('Paket terpenuhi')
 
   const filters = [
-    ['all', 'Semua'],
-    ['selected', `Pilihan ${count}`], // selalu tampil (tidak muncul tiba-tiba) supaya tinggi bar tidak berubah
-    ...(maybeCount > 0 ? [['maybe', `Ditandai ${maybeCount}`]] : []),
+    ['all', t('Semua')],
+    ['selected', t('Pilihan {n}', { n: count })], // selalu tampil (tidak muncul tiba-tiba) supaya tinggi bar tidak berubah
+    ...(maybeCount > 0 ? [['maybe', t('Ditandai {n}', { n: maybeCount })]] : []),
   ]
 
   return (
@@ -56,7 +58,7 @@ export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, s
               <span className={clsx(full || extras ? 'text-accent' : 'text-sand')}>{status}</span>
               {saveState && (
                 <span className={clsx('transition-opacity', saveState === 'offline' ? 'text-danger' : 'text-faint')}>
-                  · {saveState === 'saving' ? 'menyimpan…' : saveState === 'saved' ? 'tersimpan ✓' : 'offline'}
+                  · {saveState === 'saving' ? t('menyimpan…') : saveState === 'saved' ? t('tersimpan ✓') : t('offline')}
                 </span>
               )}
             </span>
@@ -76,9 +78,12 @@ export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, s
             disabled={count === 0 || submitting}
             className="btn-accent order-2 ml-auto shrink-0 px-4 sm:order-3 sm:ml-0 sm:px-5"
           >
-            {submitting ? 'Mengirim…' : (
+            {submitting ? (
+              t('Mengirim…')
+            ) : (
               <>
-                Kirim<span className="hidden sm:inline"> pilihan</span>
+                {t('Kirim')}
+                <span className="hidden sm:inline">{t(' pilihan')}</span>
               </>
             )}
             {!submitting && <ArrowRight size={16} />}
@@ -87,7 +92,7 @@ export default function SelectionBar({ count, limit, maxLimit, maybeCount = 0, s
           {true && (
             <div
               role="group"
-              aria-label="Tampilkan"
+              aria-label={t('Tampilkan')}
               className="order-3 flex w-full shrink-0 gap-1 overflow-x-auto rounded-full bg-ink2 p-1 text-xs sm:order-2 sm:ml-auto sm:w-auto"
             >
               {filters.map(([v, label]) => (
